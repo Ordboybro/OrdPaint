@@ -1,17 +1,22 @@
 from __future__ import annotations
 
-from collections import deque
-
-from PySide6.QtCore import QMimeData, QPoint, QPointF, QRect, QRectF, Qt, Signal
+from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QGuiApplication, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QWidget
 
+from ordpaint.core.clipboard import crop_image, from_pixmap
 from ordpaint.core.document import Document
+from ordpaint.core.raster import draw_line, draw_shape, flood_fill
+from ordpaint.core.selection import Selection, SelectionMode
 from ordpaint.core.tools import Tool
 
 
 class Canvas(QWidget):
-    """Interactive viewport, drawing surface and selection interaction layer."""
+    """Interactive document viewport.
+
+    The widget owns interaction state and rendering overlays. Raster mutations
+    are delegated to ``core.raster`` and selection state to ``Selection``.
+    """
 
     action_started = Signal()
     zoom_changed = Signal(int)
@@ -31,6 +36,7 @@ class Canvas(QWidget):
         self.brush_size = 8
         self.opacity = 100
         self.tool = Tool.BRUSH
+        self.selection = Selection()
         self._drawing = False
         self._panning = False
         self._space_pan = False
@@ -38,17 +44,21 @@ class Canvas(QWidget):
         self._start_canvas_pos: QPoint | None = None
         self._last_pan_pos = QPointF()
         self._hover_canvas_pos: QPoint | None = None
-        self.selection_rect: QRect | None = None
+        self._selection_mode = SelectionMode.REPLACE
 
         self.setMouseTracking(True)
         self.setMinimumSize(500, 400)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, True)
 
+    @property
+    def selection_rect(self) -> QRect | None:
+        return self.selection.rect
+
     def set_document(self, document: Document) -> None:
         self.document = document
         self._cancel_interaction()
-        self.selection_rect = None
+        self.selection.clear()
         self.update()
 
     def set_tool(self, tool: Tool | str) -> None:
@@ -107,65 +117,89 @@ class Canvas(QWidget):
         self.update()
 
     def select_all(self) -> None:
-        self.selection_rect = QRect(0, 0, self.document.width, self.document.height)
+        self.selection.select_all(self.document.width, self.document.height)
         self.set_tool(Tool.SELECT_RECT)
         self.update()
 
     def deselect(self) -> None:
-        self.selection_rect = None
+        self.selection.clear()
         self.update()
 
+    def set_selection_mode(self, mode: SelectionMode) -> None:
+        self._selection_mode = SelectionMode(mode)
+
     def delete_selection(self) -> bool:
-        if not self.selection_rect or self.document.active_layer.locked:
+        rect = self.selection.rect
+        layer = self.document.active_layer
+        if not rect or layer.locked:
             return False
         self.action_started.emit()
-        image = self.document.active_layer.pixmap.toImage()
+        image = layer.pixmap.toImage()
         painter = QPainter(image)
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear)
-        painter.fillRect(self.selection_rect, Qt.GlobalColor.transparent)
+        painter.fillRect(rect, Qt.GlobalColor.transparent)
         painter.end()
-        self.document.active_layer.pixmap = QPixmap.fromImage(image)
+        layer.pixmap = QPixmap.fromImage(image)
         self.document.touch()
         self.document_changed.emit()
         self.update()
         return True
 
     def copy_selection(self) -> bool:
-        if not self.selection_rect:
+        rect = self.selection.rect
+        if not rect:
             return False
-        pixmap = self.document.active_layer.pixmap.copy(self.selection_rect)
-        if pixmap.isNull():
+        image = crop_image(self.document.active_layer.pixmap.toImage(), rect)
+        if image.isNull():
             return False
-        mime = QMimeData()
-        mime.setImageData(pixmap.toImage())
-        QGuiApplication.clipboard().setMimeData(mime)
+        item = from_pixmap(QPixmap.fromImage(image), rect, suggested_position=rect.topLeft())
+        mime = QGuiApplication.clipboard().mimeData().copy() if QGuiApplication.clipboard().mimeData() else None
+        del mime
+        clipboard = QGuiApplication.clipboard()
+        clipboard.setImage(item.image)
         return True
 
     def cut_selection(self) -> bool:
+        if not self.selection.active:
+            return False
+        if self.document.active_layer.locked:
+            return False
         if not self.copy_selection():
             return False
         return self.delete_selection()
 
     def paste_from_clipboard(self) -> bool:
-        mime = QGuiApplication.clipboard().mimeData()
-        if not mime.hasImage():
+        clipboard = QGuiApplication.clipboard()
+        if not clipboard.mimeData().hasImage():
             return False
-        image = mime.imageData()
-        if not isinstance(image, QImage) or image.isNull():
+        image = clipboard.image()
+        if image.isNull():
             return False
+        position = self.selection.rect.topLeft() if self.selection.active else QPoint(0, 0)
         self.action_started.emit()
         layer = self.document.add_layer(self.document.unique_name("Pasted"))
         layer.pixmap.fill(Qt.GlobalColor.transparent)
         painter = QPainter(layer.pixmap)
-        painter.drawImage(0, 0, image)
+        painter.drawImage(position, image)
         painter.end()
         self.document.touch()
         self.document_changed.emit()
+        self.set_tool(Tool.BRUSH)
         self.update()
         return True
 
+    def move_selection(self, dx: int, dy: int) -> bool:
+        if not self.selection.active:
+            return False
+        old = QRect(self.selection.rect)
+        self.selection.move(dx, dy, self.document.width, self.document.height)
+        return old != self.selection.rect
+
     def _image_top_left(self) -> QPointF:
-        return QPointF((self.width() - self.document.width * self.zoom) / 2 + self.pan.x(), (self.height() - self.document.height * self.zoom) / 2 + self.pan.y())
+        return QPointF(
+            (self.width() - self.document.width * self.zoom) / 2 + self.pan.x(),
+            (self.height() - self.document.height * self.zoom) / 2 + self.pan.y(),
+        )
 
     def widget_to_canvas(self, pos: QPointF) -> QPoint | None:
         top_left = self._image_top_left()
@@ -192,7 +226,10 @@ class Canvas(QWidget):
         dx = end.x() - start.x()
         dy = end.y() - start.y()
         side = max(abs(dx), abs(dy))
-        return QRect(start, QPoint(start.x() + (side if dx >= 0 else -side), start.y() + (side if dy >= 0 else -side))).normalized()
+        return QRect(
+            start,
+            QPoint(start.x() + (side if dx >= 0 else -side), start.y() + (side if dy >= 0 else -side)),
+        ).normalized()
 
     def paintEvent(self, event) -> None:
         del event
@@ -208,10 +245,15 @@ class Canvas(QWidget):
         painter.save()
         painter.translate(top_left)
         painter.scale(self.zoom, self.zoom)
-        if self._drawing and self._start_canvas_pos and self._last_canvas_pos:
+        if self._drawing and self._start_canvas_pos and self._last_canvas_pos and self.tool in {
+            Tool.LINE,
+            Tool.RECTANGLE,
+            Tool.ELLIPSE,
+            Tool.SELECT_RECT,
+        }:
             self._draw_shape_preview(painter, self._start_canvas_pos, self._last_canvas_pos)
-        if self.selection_rect:
-            self._draw_selection(painter, self.selection_rect)
+        if self.selection.active:
+            self._draw_selection(painter, self.selection.rect)
         painter.restore()
         if self._hover_canvas_pos and self.tool in {Tool.BRUSH, Tool.ERASER}:
             center = self.canvas_to_widget(self._hover_canvas_pos)
@@ -253,7 +295,9 @@ class Canvas(QWidget):
 
     def mousePressEvent(self, event) -> None:
         self.setFocus()
-        if event.button() == Qt.MouseButton.MiddleButton or (event.button() == Qt.MouseButton.LeftButton and event.modifiers() & Qt.KeyboardModifier.SpaceModifier):
+        if event.button() == Qt.MouseButton.MiddleButton or (
+            event.button() == Qt.MouseButton.LeftButton and event.modifiers() & Qt.KeyboardModifier.SpaceModifier
+        ):
             self._panning = True
             self._space_pan = event.button() == Qt.MouseButton.LeftButton
             self._last_pan_pos = event.position()
@@ -270,12 +314,21 @@ class Canvas(QWidget):
             self.set_color(color)
             self.color_picked.emit(color)
             return
-        if self.document.active_layer.locked:
-            return
         if self.tool == Tool.SELECT_RECT:
             self._drawing = True
             self._last_canvas_pos = point
             self._start_canvas_pos = point
+            modifiers = event.modifiers()
+            if modifiers & Qt.KeyboardModifier.ShiftModifier:
+                self._selection_mode = SelectionMode.ADD
+            elif modifiers & Qt.KeyboardModifier.AltModifier:
+                self._selection_mode = SelectionMode.SUBTRACT
+            elif modifiers & Qt.KeyboardModifier.ControlModifier:
+                self._selection_mode = SelectionMode.INTERSECT
+            else:
+                self._selection_mode = SelectionMode.REPLACE
+            return
+        if self.document.active_layer.locked:
             return
         self.action_started.emit()
         self._drawing = True
@@ -308,7 +361,9 @@ class Canvas(QWidget):
 
     def mouseReleaseEvent(self, event) -> None:
         if self._panning:
-            if (self._space_pan and event.button() == Qt.MouseButton.LeftButton) or (not self._space_pan and event.button() == Qt.MouseButton.MiddleButton):
+            if (self._space_pan and event.button() == Qt.MouseButton.LeftButton) or (
+                not self._space_pan and event.button() == Qt.MouseButton.MiddleButton
+            ):
                 self._panning = False
                 self._space_pan = False
                 self.unsetCursor()
@@ -319,7 +374,12 @@ class Canvas(QWidget):
             if self.tool in {Tool.LINE, Tool.RECTANGLE, Tool.ELLIPSE}:
                 self._draw_shape(self._start_canvas_pos, self._last_canvas_pos)
             elif self.tool == Tool.SELECT_RECT:
-                self.selection_rect = self._constrained_rect(self._start_canvas_pos, self._last_canvas_pos) if self._shift_pressed else self._normalized_rect(self._start_canvas_pos, self._last_canvas_pos)
+                rect = (
+                    self._constrained_rect(self._start_canvas_pos, self._last_canvas_pos)
+                    if self._shift_pressed
+                    else self._normalized_rect(self._start_canvas_pos, self._last_canvas_pos)
+                )
+                self.selection.set_rect(rect, self._selection_mode)
         self._finish_action(emit_changed=self.tool != Tool.SELECT_RECT)
 
     def wheelEvent(self, event) -> None:
@@ -358,6 +418,21 @@ class Canvas(QWidget):
             self.paste_from_clipboard()
         elif event.key() == Qt.Key.Key_Delete:
             self.delete_selection()
+        elif self.tool == Tool.SELECT_RECT and event.key() in {
+            Qt.Key.Key_Left,
+            Qt.Key.Key_Right,
+            Qt.Key.Key_Up,
+            Qt.Key.Key_Down,
+        }:
+            delta = {
+                Qt.Key.Key_Left: (-1, 0),
+                Qt.Key.Key_Right: (1, 0),
+                Qt.Key.Key_Up: (0, -1),
+                Qt.Key.Key_Down: (0, 1),
+            }[event.key()]
+            if modifiers & Qt.KeyboardModifier.ShiftModifier:
+                delta = (delta[0] * 10, delta[1] * 10)
+            self.move_selection(*delta)
         else:
             super().keyPressEvent(event)
             return
@@ -375,49 +450,43 @@ class Canvas(QWidget):
         return color
 
     def _draw_segment(self, start: QPoint, end: QPoint) -> None:
-        painter = QPainter(self.document.active_layer.pixmap)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear if self.tool == Tool.ERASER else QPainter.CompositionMode.CompositionMode_SourceOver)
-        color = QColor(0, 0, 0, 255) if self.tool == Tool.ERASER else self._paint_color()
-        painter.setPen(QPen(color, self.brush_size, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
-        painter.drawLine(start, end)
-        painter.end()
+        draw_line(
+            self.document.active_layer.pixmap,
+            start,
+            end,
+            self.color,
+            self.brush_size,
+            opacity=self.opacity,
+            erase=self.tool == Tool.ERASER,
+            clip=self.selection.rect,
+        )
         self.document.touch()
         self.update()
 
     def _draw_shape(self, start: QPoint, end: QPoint) -> None:
-        painter = QPainter(self.document.active_layer.pixmap)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        painter.setPen(QPen(self._paint_color(), self.brush_size, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
         rect = self._constrained_rect(start, end) if self._shift_pressed else self._normalized_rect(start, end)
-        if self.tool == Tool.LINE:
-            painter.drawLine(start, end)
-        elif self.tool == Tool.RECTANGLE:
-            painter.drawRect(rect)
-        elif self.tool == Tool.ELLIPSE:
-            painter.drawEllipse(rect)
-        painter.end()
+        draw_shape(
+            self.document.active_layer.pixmap,
+            self.tool.value,
+            start,
+            end,
+            self.color,
+            self.brush_size,
+            opacity=self.opacity,
+            clip=self.selection.rect,
+        )
         self.document.touch()
+        del rect
 
     def _flood_fill(self, point: QPoint) -> None:
-        image = self.document.active_layer.pixmap.toImage().convertToFormat(QImage.Format.Format_ARGB32)
-        target = image.pixelColor(point)
-        replacement = self._paint_color()
-        if target == replacement:
-            return
-        queue = deque([(point.x(), point.y())])
-        visited: set[tuple[int, int]] = set()
-        width, height = image.width(), image.height()
-        while queue:
-            x, y = queue.popleft()
-            if (x, y) in visited or not (0 <= x < width and 0 <= y < height) or image.pixelColor(x, y) != target:
-                continue
-            visited.add((x, y))
-            image.setPixelColor(x, y, replacement)
-            queue.extend(((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)))
-        self.document.active_layer.pixmap = QPixmap.fromImage(image)
-        self.document.touch()
-        self.update()
+        changed = flood_fill(
+            self.document.active_layer.pixmap,
+            point,
+            self._paint_color(),
+            tolerance=0,
+        )
+        if changed:
+            self.document.touch()
 
     def _cancel_interaction(self) -> None:
         self._drawing = False
