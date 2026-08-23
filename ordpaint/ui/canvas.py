@@ -12,11 +12,7 @@ from ordpaint.core.tools import Tool
 
 
 class Canvas(QWidget):
-    """Interactive document viewport.
-
-    The widget owns interaction state and rendering overlays. Raster mutations
-    are delegated to ``core.raster`` and selection state to ``Selection``.
-    """
+    """Interactive document viewport and input layer for the paint engine."""
 
     action_started = Signal()
     zoom_changed = Signal(int)
@@ -223,10 +219,7 @@ class Canvas(QWidget):
         dx = end.x() - start.x()
         dy = end.y() - start.y()
         side = max(abs(dx), abs(dy))
-        return QRect(
-            start,
-            QPoint(start.x() + (side if dx >= 0 else -side), start.y() + (side if dy >= 0 else -side)),
-        ).normalized()
+        return QRect(start, QPoint(start.x() + (side if dx >= 0 else -side), start.y() + (side if dy >= 0 else -side))).normalized()
 
     def paintEvent(self, event) -> None:
         del event
@@ -371,11 +364,7 @@ class Canvas(QWidget):
             if self.tool in {Tool.LINE, Tool.RECTANGLE, Tool.ELLIPSE}:
                 self._draw_shape(self._start_canvas_pos, self._last_canvas_pos)
             elif self.tool == Tool.SELECT_RECT:
-                rect = (
-                    self._constrained_rect(self._start_canvas_pos, self._last_canvas_pos)
-                    if self._shift_pressed
-                    else self._normalized_rect(self._start_canvas_pos, self._last_canvas_pos)
-                )
+                rect = self._constrained_rect(self._start_canvas_pos, self._last_canvas_pos) if self._shift_pressed else self._normalized_rect(self._start_canvas_pos, self._last_canvas_pos)
                 self.selection.set_rect(rect, self._selection_mode)
         self._finish_action(emit_changed=self.tool != Tool.SELECT_RECT)
 
@@ -415,12 +404,7 @@ class Canvas(QWidget):
             self.paste_from_clipboard()
         elif event.key() == Qt.Key.Key_Delete:
             self.delete_selection()
-        elif self.tool == Tool.SELECT_RECT and event.key() in {
-            Qt.Key.Key_Left,
-            Qt.Key.Key_Right,
-            Qt.Key.Key_Up,
-            Qt.Key.Key_Down,
-        }:
+        elif self.tool == Tool.SELECT_RECT and event.key() in {Qt.Key.Key_Left, Qt.Key.Key_Right, Qt.Key.Key_Up, Qt.Key.Key_Down}:
             delta = {
                 Qt.Key.Key_Left: (-1, 0),
                 Qt.Key.Key_Right: (1, 0),
@@ -474,13 +458,13 @@ class Canvas(QWidget):
         self.document.touch()
 
     def _flood_fill(self, point: QPoint) -> None:
-        changed = flood_fill(
+        if flood_fill(
             self.document.active_layer.pixmap,
             point,
             self._paint_color(),
             tolerance=0,
-        )
-        if changed:
+            clip=self.selection.rect,
+        ):
             self.document.touch()
 
     def _cancel_interaction(self) -> None:
