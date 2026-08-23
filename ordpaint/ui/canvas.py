@@ -125,6 +125,7 @@ class Canvas(QWidget):
         painter.fillRect(self.selection_rect, Qt.GlobalColor.transparent)
         painter.end()
         self.document.active_layer.pixmap = QPixmap.fromImage(image)
+        self.document.touch()
         self.document_changed.emit()
         self.update()
         return True
@@ -158,6 +159,7 @@ class Canvas(QWidget):
         painter = QPainter(layer.pixmap)
         painter.drawImage(0, 0, image)
         painter.end()
+        self.document.touch()
         self.document_changed.emit()
         self.update()
         return True
@@ -380,6 +382,7 @@ class Canvas(QWidget):
         painter.setPen(QPen(color, self.brush_size, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
         painter.drawLine(start, end)
         painter.end()
+        self.document.touch()
         self.update()
 
     def _draw_shape(self, start: QPoint, end: QPoint) -> None:
@@ -394,6 +397,7 @@ class Canvas(QWidget):
         elif self.tool == Tool.ELLIPSE:
             painter.drawEllipse(rect)
         painter.end()
+        self.document.touch()
 
     def _flood_fill(self, point: QPoint) -> None:
         image = self.document.active_layer.pixmap.toImage().convertToFormat(QImage.Format.Format_ARGB32)
@@ -412,6 +416,7 @@ class Canvas(QWidget):
             image.setPixelColor(x, y, replacement)
             queue.extend(((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)))
         self.document.active_layer.pixmap = QPixmap.fromImage(image)
+        self.document.touch()
         self.update()
 
     def _cancel_interaction(self) -> None:
