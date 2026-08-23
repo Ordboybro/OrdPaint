@@ -15,3 +15,37 @@ def test_undo_redo_restores_document(qt_app):
     redone = history.redo(restored)
     assert redone is not None
     assert len(redone.layers) == 2
+
+
+def test_dirty_state_tracks_saved_position(qt_app):
+    document = Document(10, 10)
+    history = History()
+    history.mark_saved()
+    assert history.is_dirty() is False
+
+    history.push(document)
+    document.add_layer("Second")
+    assert history.is_dirty() is True
+
+    restored = history.undo(document)
+    assert restored is not None
+    assert history.is_dirty() is False
+
+    redone = history.redo(restored)
+    assert redone is not None
+    assert history.is_dirty() is True
+
+
+def test_branch_after_undo_stays_dirty(qt_app):
+    document = Document(10, 10)
+    history = History()
+    history.mark_saved()
+
+    history.push(document)
+    document.add_layer("A")
+    restored = history.undo(document)
+    assert restored is not None
+
+    history.push(restored)
+    restored.add_layer("B")
+    assert history.is_dirty() is True
