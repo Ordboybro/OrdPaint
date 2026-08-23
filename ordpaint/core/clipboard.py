@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from PySide6.QtCore import QPoint, QRect
 from PySide6.QtGui import QImage, QPixmap
@@ -12,7 +12,7 @@ class ClipboardItem:
 
     image: QImage
     source_rect: QRect | None = None
-    suggested_position: QPoint = QPoint()
+    suggested_position: QPoint = field(default_factory=QPoint)
     name: str = "Pasted"
 
     def copy_image(self) -> QImage:
@@ -27,7 +27,7 @@ def from_pixmap(
     pixmap: QPixmap,
     source_rect: QRect | None = None,
     *,
-    suggested_position: QPoint = QPoint(),
+    suggested_position: QPoint | None = None,
     name: str = "Pasted",
 ) -> ClipboardItem:
     if pixmap.isNull():
@@ -35,7 +35,7 @@ def from_pixmap(
     return ClipboardItem(
         image=pixmap.toImage().copy(),
         source_rect=QRect(source_rect) if source_rect is not None else None,
-        suggested_position=QPoint(suggested_position),
+        suggested_position=QPoint(suggested_position or QPoint()),
         name=name,
     )
 
