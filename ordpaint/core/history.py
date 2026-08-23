@@ -13,7 +13,7 @@ class HistoryState:
 
 
 class History:
-    """Bounded snapshot history with undo transactions and saved-state tracking."""
+    """Bounded snapshot history with transactional user actions."""
 
     def __init__(self, limit: int = 100) -> None:
         self.limit = max(1, int(limit))
@@ -23,14 +23,19 @@ class History:
         self._current_id = 0
         self._saved_id = 0
         self._transaction: Document | None = None
+        self._transaction_revision = -1
 
     def clear(self) -> None:
-        self._undo.clear(); self._redo.clear()
-        self._next_id = 1; self._current_id = 0; self._saved_id = 0
-        self._transaction = None
+        self._undo.clear()
+        self._redo.clear()
+        self._next_id = 1
+        self._current_id = 0
+        self._saved_id = 0
+        self.cancel_transaction()
 
     def _push_snapshot(self, document: Document) -> None:
-        after_id = self._next_id; self._next_id += 1
+        after_id = self._next_id
+        self._next_id += 1
         self._undo.append(HistoryState(document.copy(), self._current_id, after_id))
         self._current_id = after_id
         if len(self._undo) > self.limit:
@@ -45,20 +50,23 @@ class History:
         if self._transaction is not None:
             return False
         self._transaction = document.copy()
+        self._transaction_revision = document.revision
         return True
 
     def end_transaction(self, document: Document) -> bool:
         if self._transaction is None:
             return False
         before = self._transaction
-        self._transaction = None
-        if before == document:
+        changed = document.revision != self._transaction_revision
+        self.cancel_transaction()
+        if not changed:
             return False
         self._push_snapshot(before)
         return True
 
     def cancel_transaction(self) -> None:
         self._transaction = None
+        self._transaction_revision = -1
 
     def transaction_active(self) -> bool:
         return self._transaction is not None
@@ -76,16 +84,18 @@ class History:
         return bool(self._redo)
 
     def undo(self, current: Document) -> Document | None:
-        if not self._undo: return None
-        self._transaction = None
+        if not self._undo:
+            return None
+        self.cancel_transaction()
         state = self._undo.pop()
         self._redo.append(HistoryState(current.copy(), self._current_id, state.after_id))
         self._current_id = state.state_id
         return state.document.copy()
 
     def redo(self, current: Document) -> Document | None:
-        if not self._redo: return None
-        self._transaction = None
+        if not self._redo:
+            return None
+        self.cancel_transaction()
         state = self._redo.pop()
         self._undo.append(HistoryState(current.copy(), self._current_id, state.after_id))
         self._current_id = state.after_id
