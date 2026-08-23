@@ -14,6 +14,8 @@ class Document:
     height: int = 720
     layers: list[Layer] = field(default_factory=list)
     active_index: int = 0
+    revision: int = field(default=0, init=False, repr=False, compare=False)
+    _composite_cache: dict[tuple[int, int, int, int], QPixmap] = field(default_factory=dict, init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         if self.width < 1 or self.height < 1:
@@ -25,6 +27,11 @@ class Document:
     @property
     def active_layer(self) -> Layer:
         return self.layers[self.active_index]
+
+    def touch(self) -> None:
+        """Mark pixel/document data as changed and invalidate rendered caches."""
+        self.revision += 1
+        self._composite_cache.clear()
 
     def copy(self) -> "Document":
         return Document(
@@ -43,6 +50,7 @@ class Document:
         index = max(0, min(index, len(self.layers)))
         self.layers.insert(index, layer)
         self.active_index = index
+        self.touch()
         return layer
 
     def duplicate_active_layer(self) -> Layer:
@@ -50,6 +58,7 @@ class Document:
         duplicate.name = self.unique_name(f"{duplicate.name} copy")
         self.layers.insert(self.active_index + 1, duplicate)
         self.active_index += 1
+        self.touch()
         return duplicate
 
     def remove_active_layer(self) -> bool:
@@ -57,6 +66,7 @@ class Document:
             return False
         self.layers.pop(self.active_index)
         self.active_index = min(self.active_index, len(self.layers) - 1)
+        self.touch()
         return True
 
     def set_active_index(self, index: int) -> None:
@@ -66,17 +76,27 @@ class Document:
 
     def rename_active_layer(self, name: str) -> None:
         name = name.strip()
-        if name:
+        if name and name != self.active_layer.name:
             self.active_layer.name = name
+            self.touch()
 
     def set_layer_visibility(self, index: int, visible: bool) -> None:
-        self.layers[index].visible = bool(visible)
+        visible = bool(visible)
+        if self.layers[index].visible != visible:
+            self.layers[index].visible = visible
+            self.touch()
 
     def set_layer_opacity(self, index: int, opacity: int) -> None:
-        self.layers[index].opacity = max(0, min(100, int(opacity)))
+        value = max(0, min(100, int(opacity)))
+        if self.layers[index].opacity != value:
+            self.layers[index].opacity = value
+            self.touch()
 
     def set_layer_locked(self, index: int, locked: bool) -> None:
-        self.layers[index].locked = bool(locked)
+        locked = bool(locked)
+        if self.layers[index].locked != locked:
+            self.layers[index].locked = locked
+            self.touch()
 
     def move_active_layer(self, offset: int) -> bool:
         target = self.active_index + offset
@@ -84,6 +104,7 @@ class Document:
             return False
         self.layers[self.active_index], self.layers[target] = self.layers[target], self.layers[self.active_index]
         self.active_index = target
+        self.touch()
         return True
 
     def merge_active_down(self) -> bool:
@@ -98,13 +119,13 @@ class Document:
         painter.end()
         self.layers.pop(self.active_index)
         self.active_index -= 1
+        self.touch()
         return True
 
     def merge_visible(self) -> bool:
         visible_indices = [index for index, layer in enumerate(self.layers) if layer.visible]
         if len(visible_indices) <= 1:
             return False
-
         base_index = visible_indices[0]
         base = self.layers[base_index]
         result = QPixmap(self.width, self.height)
@@ -116,7 +137,6 @@ class Document:
             painter.setCompositionMode(layer.blend_mode)
             painter.drawPixmap(0, 0, layer.pixmap)
         painter.end()
-
         base.pixmap = result
         base.opacity = 100
         base.blend_mode = Qt.CompositionMode.CompositionMode_SourceOver
@@ -125,6 +145,7 @@ class Document:
             if index < self.active_index:
                 self.active_index -= 1
         self.active_index = min(base_index, len(self.layers) - 1)
+        self.touch()
         return True
 
     def clear_active_layer(self) -> bool:
@@ -132,6 +153,7 @@ class Document:
         if layer.locked:
             return False
         layer.pixmap.fill(Qt.GlobalColor.transparent)
+        self.touch()
         return True
 
     def unique_name(self, base: str) -> str:
@@ -144,8 +166,13 @@ class Document:
         return f"{base} {number}"
 
     def composite(self, background: QColor | None = None) -> QPixmap:
+        color = background if background is not None else QColor("white")
+        key = (color.red(), color.green(), color.blue(), color.alpha())
+        cached = self._composite_cache.get(key)
+        if cached is not None:
+            return cached.copy()
         result = QPixmap(self.width, self.height)
-        result.fill(background if background is not None else QColor("white"))
+        result.fill(color)
         painter = QPainter(result)
         for layer in self.layers:
             if not layer.visible:
@@ -154,4 +181,5 @@ class Document:
             painter.setCompositionMode(layer.blend_mode)
             painter.drawPixmap(0, 0, layer.pixmap)
         painter.end()
-        return result
+        self._composite_cache[key] = result
+        return result.copy()
