@@ -5,14 +5,20 @@ from dataclasses import dataclass
 from .document import Document
 
 
-@dataclass
+@dataclass(frozen=True)
 class HistoryState:
     document: Document
 
 
 class History:
+    """Snapshot history for user-level document actions.
+
+    ``push`` must be called immediately before a mutating action. The stored
+    snapshot is the state to restore when that action is undone.
+    """
+
     def __init__(self, limit: int = 50) -> None:
-        self.limit = max(1, limit)
+        self.limit = max(1, int(limit))
         self._undo: list[HistoryState] = []
         self._redo: list[HistoryState] = []
 
@@ -23,7 +29,7 @@ class History:
     def push(self, document: Document) -> None:
         self._undo.append(HistoryState(document.copy()))
         if len(self._undo) > self.limit:
-            self._undo.pop(0)
+            del self._undo[: len(self._undo) - self.limit]
         self._redo.clear()
 
     def can_undo(self) -> bool:
@@ -43,3 +49,6 @@ class History:
             return None
         self._undo.append(HistoryState(current.copy()))
         return self._redo.pop().document.copy()
+
+    def __len__(self) -> int:
+        return len(self._undo)
