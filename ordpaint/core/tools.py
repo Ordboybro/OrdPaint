@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from enum import StrEnum
 
 
@@ -14,35 +15,34 @@ class Tool(StrEnum):
     SELECT_RECT = "select_rect"
 
 
-TOOL_LABELS: dict[Tool, str] = {
-    Tool.BRUSH: "Кисть",
-    Tool.ERASER: "Ластик",
-    Tool.LINE: "Линия",
-    Tool.RECTANGLE: "Прямоугольник",
-    Tool.ELLIPSE: "Эллипс",
-    Tool.FILL: "Заливка",
-    Tool.EYEDROPPER: "Пипетка",
-    Tool.SELECT_RECT: "Прямоугольное выделение",
+@dataclass(frozen=True)
+class ToolInfo:
+    label: str
+    shortcut: str
+    group: str
+    supports_size: bool = False
+
+
+TOOL_INFO = {
+    Tool.BRUSH: ToolInfo("Кисть", "B", "paint", True),
+    Tool.ERASER: ToolInfo("Ластик", "E", "paint", True),
+    Tool.LINE: ToolInfo("Линия", "L", "shape", True),
+    Tool.RECTANGLE: ToolInfo("Прямоугольник", "R", "shape", True),
+    Tool.ELLIPSE: ToolInfo("Эллипс", "O", "shape", True),
+    Tool.FILL: ToolInfo("Заливка", "G", "paint"),
+    Tool.EYEDROPPER: ToolInfo("Пипетка", "I", "color"),
+    Tool.SELECT_RECT: ToolInfo("Прямоугольное выделение", "M", "selection"),
 }
 
-TOOL_SHORTCUTS: dict[Tool, str] = {
-    Tool.BRUSH: "B",
-    Tool.ERASER: "E",
-    Tool.LINE: "L",
-    Tool.RECTANGLE: "R",
-    Tool.ELLIPSE: "O",
-    Tool.FILL: "G",
-    Tool.EYEDROPPER: "I",
-    Tool.SELECT_RECT: "M",
-}
-
-TOOLS_WITH_BRUSH_SIZE = frozenset({Tool.BRUSH, Tool.ERASER, Tool.LINE, Tool.RECTANGLE, Tool.ELLIPSE})
+TOOL_LABELS = {tool: info.label for tool, info in TOOL_INFO.items()}
+TOOL_SHORTCUTS = {tool: info.shortcut for tool, info in TOOL_INFO.items()}
+TOOLS_WITH_BRUSH_SIZE = frozenset(tool for tool, info in TOOL_INFO.items() if info.supports_size)
 SHAPE_TOOLS = frozenset({Tool.LINE, Tool.RECTANGLE, Tool.ELLIPSE})
 
 
 def tool_label(tool: Tool) -> str:
-    return TOOL_LABELS[Tool(tool)]
+    return TOOL_INFO[Tool(tool)].label
 
 
 def tool_shortcut(tool: Tool) -> str:
-    return TOOL_SHORTCUTS[Tool(tool)]
+    return TOOL_INFO[Tool(tool)].shortcut
