@@ -69,6 +69,15 @@ class Document:
         if name:
             self.active_layer.name = name
 
+    def set_layer_visibility(self, index: int, visible: bool) -> None:
+        self.layers[index].visible = bool(visible)
+
+    def set_layer_opacity(self, index: int, opacity: int) -> None:
+        self.layers[index].opacity = max(0, min(100, int(opacity)))
+
+    def set_layer_locked(self, index: int, locked: bool) -> None:
+        self.layers[index].locked = bool(locked)
+
     def move_active_layer(self, offset: int) -> bool:
         target = self.active_index + offset
         if not 0 <= target < len(self.layers):
@@ -87,9 +96,42 @@ class Document:
         painter.setCompositionMode(upper.blend_mode)
         painter.drawPixmap(0, 0, upper.pixmap)
         painter.end()
-        lower.name = lower.name
         self.layers.pop(self.active_index)
         self.active_index -= 1
+        return True
+
+    def merge_visible(self) -> bool:
+        visible_indices = [index for index, layer in enumerate(self.layers) if layer.visible]
+        if len(visible_indices) <= 1:
+            return False
+
+        base_index = visible_indices[0]
+        base = self.layers[base_index]
+        result = QPixmap(self.width, self.height)
+        result.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(result)
+        for index in visible_indices:
+            layer = self.layers[index]
+            painter.setOpacity(max(0, min(100, layer.opacity)) / 100)
+            painter.setCompositionMode(layer.blend_mode)
+            painter.drawPixmap(0, 0, layer.pixmap)
+        painter.end()
+
+        base.pixmap = result
+        base.opacity = 100
+        base.blend_mode = Qt.CompositionMode.CompositionMode_SourceOver
+        for index in reversed(visible_indices[1:]):
+            self.layers.pop(index)
+            if index < self.active_index:
+                self.active_index -= 1
+        self.active_index = min(base_index, len(self.layers) - 1)
+        return True
+
+    def clear_active_layer(self) -> bool:
+        layer = self.active_layer
+        if layer.locked:
+            return False
+        layer.pixmap.fill(Qt.GlobalColor.transparent)
         return True
 
     def unique_name(self, base: str) -> str:
@@ -103,7 +145,7 @@ class Document:
 
     def composite(self, background: QColor | None = None) -> QPixmap:
         result = QPixmap(self.width, self.height)
-        result.fill(background or QColor("white"))
+        result.fill(background if background is not None else QColor("white"))
         painter = QPainter(result)
         for layer in self.layers:
             if not layer.visible:
