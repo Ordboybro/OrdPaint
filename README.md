@@ -1,14 +1,43 @@
 # OrdPaint
 
-Fast desktop raster graphics editor built with Python and PySide6.
+Быстрый настольный графический редактор на Python и PySide6.
 
-## Current status
+## Сейчас реализовано
 
-The project is under active development. The first milestone is a stable editor core: canvas, zoom/pan, brush, eraser, layers, undo/redo, color controls, file operations and a dark professional interface inspired by the supplied reference.
+- многослойный растровый документ;
+- кисть, ластик, линия, прямоугольник, эллипс;
+- заливка, пипетка и прямоугольное выделение;
+- прозрачность, размер кисти и цвет;
+- видимость, блокировка, дублирование, удаление и перемещение слоёв;
+- режимы наложения и непрозрачность слоёв;
+- Undo/Redo со снимками документа;
+- масштабирование, панорамирование и подгонка под окно;
+- импорт распространённых растровых форматов;
+- экспорт PNG/JPEG/WEBP/BMP;
+- собственный формат проекта `.ordpaint`;
+- тёмный интерфейс и док-панели.
 
-## Run
+## Запуск
 
 ```bash
+python -m venv .venv
+.venv\Scripts\activate
 pip install -r requirements.txt
 python main.py
 ```
+
+## Горячие клавиши
+
+- `B` — кисть
+- `E` — ластик
+- `L` — линия
+- `R` — прямоугольник
+- `O` — эллипс
+- `G` — заливка
+- `I` — пипетка
+- `M` — выделение
+- `Ctrl+Z` / `Ctrl+Y` — Undo/Redo
+- `Ctrl+колесо` — масштаб
+- `Средняя кнопка мыши` или `Space + ЛКМ` — панорамирование
+
+Проект находится в активной разработке.
