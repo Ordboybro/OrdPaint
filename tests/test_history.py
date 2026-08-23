@@ -49,3 +49,13 @@ def test_branch_after_undo_stays_dirty(qt_app):
     history.push(restored)
     restored.add_layer("B")
     assert history.is_dirty() is True
+    assert history.can_redo() is False
+
+
+def test_history_limit():
+    document = Document(8, 8)
+    history = History(limit=2)
+    for _ in range(5):
+        history.push(document)
+        document = document.copy()
+    assert len(history) == 2
