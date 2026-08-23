@@ -21,13 +21,22 @@ def draw_line(
     painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
     if clip is not None:
         painter.setClipRect(clip)
-    mode = QPainter.CompositionMode.CompositionMode_Clear if erase else QPainter.CompositionMode.CompositionMode_SourceOver
-    painter.setCompositionMode(mode)
+    painter.setCompositionMode(
+        QPainter.CompositionMode.CompositionMode_Clear if erase else QPainter.CompositionMode.CompositionMode_SourceOver
+    )
     draw_color = QColor(color)
     draw_color.setAlpha(round(draw_color.alpha() * max(0, min(100, opacity)) / 100))
     if erase:
         draw_color = QColor(0, 0, 0, 255)
-    painter.setPen(QPen(draw_color, max(1, int(size)), Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    painter.setPen(
+        QPen(
+            draw_color,
+            max(1, int(size)),
+            Qt.PenStyle.SolidLine,
+            Qt.PenCapStyle.RoundCap,
+            Qt.PenJoinStyle.RoundJoin,
+        )
+    )
     painter.drawLine(start, end)
     painter.end()
 
@@ -49,7 +58,15 @@ def draw_shape(
         painter.setClipRect(clip)
     draw_color = QColor(color)
     draw_color.setAlpha(round(draw_color.alpha() * max(0, min(100, opacity)) / 100))
-    painter.setPen(QPen(draw_color, max(1, int(size)), Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    painter.setPen(
+        QPen(
+            draw_color,
+            max(1, int(size)),
+            Qt.PenStyle.SolidLine,
+            Qt.PenCapStyle.RoundCap,
+            Qt.PenJoinStyle.RoundJoin,
+        )
+    )
     rect = QRect(start, end).normalized()
     if tool == "line":
         painter.drawLine(start, end)
@@ -78,9 +95,17 @@ def paste(pixmap: QPixmap, source: QPixmap, position: QPoint, *, opacity: int = 
     painter.end()
 
 
-def flood_fill(pixmap: QPixmap, point: QPoint, replacement: QColor, tolerance: int = 0) -> bool:
+def flood_fill(
+    pixmap: QPixmap,
+    point: QPoint,
+    replacement: QColor,
+    tolerance: int = 0,
+    clip: QRect | None = None,
+) -> bool:
     image = pixmap.toImage().convertToFormat(QImage.Format.Format_ARGB32)
-    if not QRect(0, 0, image.width(), image.height()).contains(point):
+    bounds = QRect(0, 0, image.width(), image.height())
+    allowed = bounds if clip is None else bounds.intersected(clip)
+    if allowed.isEmpty() or not allowed.contains(point):
         return False
     target = image.pixelColor(point)
     if _color_distance(target, replacement) <= tolerance:
@@ -90,9 +115,12 @@ def flood_fill(pixmap: QPixmap, point: QPoint, replacement: QColor, tolerance: i
     queue = deque([(point.x(), point.y())])
     visited: set[tuple[int, int]] = set()
     changed = False
+    tolerance = max(0, min(255, int(tolerance)))
     while queue:
         x, y = queue.popleft()
         if (x, y) in visited or not (0 <= x < width and 0 <= y < height):
+            continue
+        if not allowed.contains(QPoint(x, y)):
             continue
         current = image.pixelColor(x, y)
         if _color_distance(current, target) > tolerance:
