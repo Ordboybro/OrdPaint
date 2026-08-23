@@ -23,6 +23,14 @@ class Document:
     def active_layer(self) -> Layer:
         return self.layers[self.active_index]
 
+    def copy(self) -> "Document":
+        return Document(
+            width=self.width,
+            height=self.height,
+            layers=[layer.copy() for layer in self.layers],
+            active_index=self.active_index,
+        )
+
     def add_layer(self, name: str | None = None) -> Layer:
         pixmap = QPixmap(self.width, self.height)
         pixmap.fill(Qt.GlobalColor.transparent)
@@ -30,6 +38,13 @@ class Document:
         self.layers.append(layer)
         self.active_index = len(self.layers) - 1
         return layer
+
+    def duplicate_active_layer(self) -> Layer:
+        duplicate = self.active_layer.copy()
+        duplicate.name = f"{duplicate.name} copy"
+        self.layers.insert(self.active_index + 1, duplicate)
+        self.active_index += 1
+        return duplicate
 
     def remove_active_layer(self) -> bool:
         if len(self.layers) <= 1:
