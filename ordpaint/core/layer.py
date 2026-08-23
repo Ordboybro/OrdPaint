@@ -21,7 +21,8 @@ class Layer:
 
     @property
     def editable(self) -> bool:
-        return self.visible and not self.locked and not self.pixmap.isNull()
+        """Whether pixel operations are allowed; hidden layers can still be edited."""
+        return not self.locked and not self.pixmap.isNull()
 
     def copy(self) -> "Layer":
         return Layer(
