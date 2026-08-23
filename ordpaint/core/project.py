@@ -12,6 +12,9 @@ from .document import Document
 from .layer import Layer
 
 PROJECT_VERSION = 1
+PROJECT_FORMAT = "ordpaint"
+MAX_PROJECT_PIXELS = 100_000_000
+MAX_LAYERS = 512
 
 
 class ProjectError(RuntimeError):
@@ -34,7 +37,10 @@ def _encode_png(pixmap: QPixmap) -> str:
 def _decode_png(value: str) -> QPixmap:
     if not isinstance(value, str) or not value:
         raise ProjectError("Invalid layer image data")
-    raw = QByteArray.fromBase64(value.encode("ascii"))
+    try:
+        raw = QByteArray.fromBase64(value.encode("ascii"))
+    except (UnicodeError, ValueError) as exc:
+        raise ProjectError("Invalid layer image encoding") from exc
     image = QImage.fromData(raw, "PNG")
     if image.isNull():
         raise ProjectError("Invalid layer image")
@@ -42,8 +48,14 @@ def _decode_png(value: str) -> QPixmap:
 
 
 def save_project(document: Document, path: str | Path) -> None:
-    destination = Path(path)
+    destination = Path(path).expanduser()
+    if document.width * document.height > MAX_PROJECT_PIXELS:
+        raise ProjectError("Document is too large to save safely")
+    if not document.layers or len(document.layers) > MAX_LAYERS:
+        raise ProjectError("Invalid layer count")
+
     payload = {
+        "format": PROJECT_FORMAT,
         "version": PROJECT_VERSION,
         "width": document.width,
         "height": document.height,
@@ -90,11 +102,13 @@ def save_project(document: Document, path: str | Path) -> None:
 
 def load_project(path: str | Path) -> Document:
     try:
-        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+        payload = json.loads(Path(path).expanduser().read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ProjectError("Could not read project") from exc
 
-    if not isinstance(payload, dict) or payload.get("version") != PROJECT_VERSION:
+    if not isinstance(payload, dict):
+        raise ProjectError("Invalid project structure")
+    if payload.get("format", PROJECT_FORMAT) != PROJECT_FORMAT or payload.get("version") != PROJECT_VERSION:
         raise ProjectError("Unsupported project version")
 
     try:
@@ -102,10 +116,12 @@ def load_project(path: str | Path) -> Document:
         height = int(payload["height"])
     except (KeyError, TypeError, ValueError) as exc:
         raise ProjectError("Invalid project dimensions") from exc
+    if width < 1 or height < 1 or width * height > MAX_PROJECT_PIXELS:
+        raise ProjectError("Invalid project dimensions")
 
     raw_layers = payload.get("layers")
-    if width < 1 or height < 1 or not isinstance(raw_layers, list) or not raw_layers:
-        raise ProjectError("Invalid project structure")
+    if not isinstance(raw_layers, list) or not raw_layers or len(raw_layers) > MAX_LAYERS:
+        raise ProjectError("Invalid project layer count")
 
     layers: list[Layer] = []
     for item in raw_layers:
@@ -123,9 +139,10 @@ def load_project(path: str | Path) -> Document:
             opacity = int(item.get("opacity", 100))
         except (TypeError, ValueError) as exc:
             raise ProjectError("Invalid layer opacity") from exc
+        name = str(item.get("name") or "Layer").strip()[:128] or "Layer"
         layers.append(
             Layer(
-                name=str(item.get("name") or "Layer"),
+                name=name,
                 pixmap=pixmap,
                 visible=bool(item.get("visible", True)),
                 opacity=max(0, min(100, opacity)),
