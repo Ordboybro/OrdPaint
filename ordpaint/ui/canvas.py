@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import deque
 
-from PySide6.QtCore import QPoint, QPointF, QRect, Qt, Signal
+from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QWidget
 
@@ -11,12 +11,7 @@ from ordpaint.core.tools import Tool
 
 
 class Canvas(QWidget):
-    """Interactive viewport for the document.
-
-    The canvas owns only view state and input handling. Pixel data remains in
-    ``Document``/``Layer`` while this widget translates mouse coordinates and
-    performs the selected drawing operation.
-    """
+    """Interactive viewport for the document."""
 
     action_started = Signal()
     zoom_changed = Signal(int)
@@ -36,15 +31,14 @@ class Canvas(QWidget):
         self.brush_size = 8
         self.opacity = 100
         self.tool = Tool.BRUSH
-
         self._drawing = False
         self._panning = False
+        self._space_pan = False
         self._last_canvas_pos: QPoint | None = None
         self._start_canvas_pos: QPoint | None = None
         self._last_pan_pos = QPointF()
         self._hover_canvas_pos: QPoint | None = None
         self.selection_rect: QRect | None = None
-        self._preview_image: QPixmap | None = None
 
         self.setMouseTracking(True)
         self.setMinimumSize(500, 400)
@@ -83,11 +77,8 @@ class Canvas(QWidget):
             before = self.widget_to_canvas(anchor)
             self.zoom = new_zoom
             if before is not None:
-                after_top_left = self._image_top_left()
-                target = QPointF(
-                    after_top_left.x() + before.x() * self.zoom,
-                    after_top_left.y() + before.y() * self.zoom,
-                )
+                top_left = self._image_top_left()
+                target = QPointF(top_left.x() + before.x() * self.zoom, top_left.y() + before.y() * self.zoom)
                 self.pan += anchor - target
         else:
             self.zoom = new_zoom
@@ -95,10 +86,10 @@ class Canvas(QWidget):
         self.update()
 
     def zoom_in(self) -> None:
-        self.set_zoom(self.zoom * 1.15, self.rect().center())
+        self.set_zoom(self.zoom * 1.15, QPointF(self.rect().center()))
 
     def zoom_out(self) -> None:
-        self.set_zoom(self.zoom / 1.15, self.rect().center())
+        self.set_zoom(self.zoom / 1.15, QPointF(self.rect().center()))
 
     def reset_view(self) -> None:
         self.zoom = 1.0
@@ -137,11 +128,21 @@ class Canvas(QWidget):
     def _normalized_rect(start: QPoint, end: QPoint) -> QRect:
         return QRect(start, end).normalized()
 
+    @property
+    def _shift_pressed(self) -> bool:
+        return bool(self.keyboardModifiers() & Qt.KeyboardModifier.ShiftModifier)
+
+    @staticmethod
+    def _constrained_rect(start: QPoint, end: QPoint) -> QRect:
+        dx = end.x() - start.x()
+        dy = end.y() - start.y()
+        side = max(abs(dx), abs(dy))
+        return QRect(start, QPoint(start.x() + (side if dx >= 0 else -side), start.y() + (side if dy >= 0 else -side))).normalized()
+
     def paintEvent(self, event) -> None:
         del event
         painter = QPainter(self)
         painter.fillRect(self.rect(), QColor("#202124"))
-
         top_left = self._image_top_left()
         target = QRectF(top_left.x(), top_left.y(), self.document.width * self.zoom, self.document.height * self.zoom)
         painter.save()
@@ -165,17 +166,14 @@ class Canvas(QWidget):
             painter.setPen(QPen(QColor("#ffffff"), 1))
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawEllipse(center, radius, radius)
-
         painter.setPen(QPen(QColor("#4a4d52"), 1))
         painter.drawRect(target)
         painter.end()
 
-    def _draw_checkerboard(self, painter: QPainter, rect) -> None:
+    def _draw_checkerboard(self, painter: QPainter, rect: QRectF) -> None:
         size = max(4, min(24, round(12 * self.zoom)))
-        left = int(rect.left())
-        top = int(rect.top())
-        right = int(rect.right())
-        bottom = int(rect.bottom())
+        left, top = int(rect.left()), int(rect.top())
+        right, bottom = int(rect.right()), int(rect.bottom())
         painter.fillRect(rect, QColor("#e8e8e8"))
         for y in range(top - top % size, bottom + size, size):
             for x in range(left - left % size, right + size, size):
@@ -201,49 +199,31 @@ class Canvas(QWidget):
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawRect(rect)
 
-    @property
-    def _shift_pressed(self) -> bool:
-        return bool(self.keyboardModifiers() & Qt.KeyboardModifier.ShiftModifier)
-
-    @staticmethod
-    def _constrained_rect(start: QPoint, end: QPoint) -> QRect:
-        dx = end.x() - start.x()
-        dy = end.y() - start.y()
-        side = max(abs(dx), abs(dy))
-        return QRect(start, QPoint(start.x() + (side if dx >= 0 else -side), start.y() + (side if dy >= 0 else -side))).normalized()
-
     def mousePressEvent(self, event) -> None:
         self.setFocus()
-        if event.button() == Qt.MouseButton.MiddleButton or (
-            event.button() == Qt.MouseButton.LeftButton
-            and event.modifiers() & Qt.KeyboardModifier.SpaceModifier
-        ):
+        if event.button() == Qt.MouseButton.MiddleButton or (event.button() == Qt.MouseButton.LeftButton and event.modifiers() & Qt.KeyboardModifier.SpaceModifier):
             self._panning = True
+            self._space_pan = event.button() == Qt.MouseButton.LeftButton
             self._last_pan_pos = event.position()
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
             return
         if event.button() != Qt.MouseButton.LeftButton:
             return
-
         point = self.widget_to_canvas(event.position())
         if point is None:
             return
         self._hover_canvas_pos = point
-
         if self.tool == Tool.EYEDROPPER:
             color = self.document.composite(QColor(0, 0, 0, 0)).toImage().pixelColor(point)
             self.set_color(color)
             self.color_picked.emit(color)
             return
-
         if self.document.active_layer.locked:
             return
-
         self.action_started.emit()
         self._drawing = True
         self._last_canvas_pos = point
         self._start_canvas_pos = point
-
         if self.tool == Tool.FILL:
             self._flood_fill(point)
             self._finish_action()
@@ -257,12 +237,10 @@ class Canvas(QWidget):
             self._last_pan_pos = event.position()
             self.update()
             return
-
         point = self.widget_to_canvas(event.position())
         self._hover_canvas_pos = point
         if point is not None:
             self.cursor_position_changed.emit(point)
-
         if not self._drawing or point is None:
             self.update()
             return
@@ -272,9 +250,11 @@ class Canvas(QWidget):
         self.update()
 
     def mouseReleaseEvent(self, event) -> None:
-        if self._panning and event.button() == Qt.MouseButton.MiddleButton:
-            self._panning = False
-            self.unsetCursor()
+        if self._panning:
+            if (self._space_pan and event.button() == Qt.MouseButton.LeftButton) or (not self._space_pan and event.button() == Qt.MouseButton.MiddleButton):
+                self._panning = False
+                self._space_pan = False
+                self.unsetCursor()
             return
         if event.button() != Qt.MouseButton.LeftButton or not self._drawing:
             return
@@ -327,8 +307,7 @@ class Canvas(QWidget):
         layer = self.document.active_layer
         painter = QPainter(layer.pixmap)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        mode = QPainter.CompositionMode.CompositionMode_Clear if self.tool == Tool.ERASER else QPainter.CompositionMode.CompositionMode_SourceOver
-        painter.setCompositionMode(mode)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear if self.tool == Tool.ERASER else QPainter.CompositionMode.CompositionMode_SourceOver)
         color = QColor(0, 0, 0, 255) if self.tool == Tool.ERASER else self._paint_color()
         painter.setPen(QPen(color, self.brush_size, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
         painter.drawLine(start, end)
@@ -354,7 +333,6 @@ class Canvas(QWidget):
         replacement = self._paint_color()
         if target == replacement:
             return
-
         queue = deque([(point.x(), point.y())])
         visited: set[tuple[int, int]] = set()
         width, height = image.width(), image.height()
@@ -373,9 +351,9 @@ class Canvas(QWidget):
     def _cancel_interaction(self) -> None:
         self._drawing = False
         self._panning = False
+        self._space_pan = False
         self._last_canvas_pos = None
         self._start_canvas_pos = None
-        self._preview_image = None
         self.unsetCursor()
 
     def _finish_action(self) -> None:
