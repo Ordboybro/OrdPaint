@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from collections import deque
 
-from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QImage, QPainter, QPen, QPixmap
+from PySide6.QtCore import QMimeData, QPoint, QPointF, QRect, QRectF, Qt, Signal
+from PySide6.QtGui import QColor, QGuiApplication, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QWidget
 
 from ordpaint.core.document import Document
@@ -11,7 +11,7 @@ from ordpaint.core.tools import Tool
 
 
 class Canvas(QWidget):
-    """Interactive viewport for the document."""
+    """Interactive viewport, drawing surface and selection interaction layer."""
 
     action_started = Signal()
     zoom_changed = Signal(int)
@@ -106,11 +106,63 @@ class Canvas(QWidget):
         self.zoom_changed.emit(round(self.zoom * 100))
         self.update()
 
+    def select_all(self) -> None:
+        self.selection_rect = QRect(0, 0, self.document.width, self.document.height)
+        self.set_tool(Tool.SELECT_RECT)
+        self.update()
+
+    def deselect(self) -> None:
+        self.selection_rect = None
+        self.update()
+
+    def delete_selection(self) -> bool:
+        if not self.selection_rect or self.document.active_layer.locked:
+            return False
+        self.action_started.emit()
+        image = self.document.active_layer.pixmap.toImage()
+        painter = QPainter(image)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear)
+        painter.fillRect(self.selection_rect, Qt.GlobalColor.transparent)
+        painter.end()
+        self.document.active_layer.pixmap = QPixmap.fromImage(image)
+        self.document_changed.emit()
+        self.update()
+        return True
+
+    def copy_selection(self) -> bool:
+        if not self.selection_rect:
+            return False
+        pixmap = self.document.active_layer.pixmap.copy(self.selection_rect)
+        if pixmap.isNull():
+            return False
+        mime = QMimeData()
+        mime.setImageData(pixmap.toImage())
+        QGuiApplication.clipboard().setMimeData(mime)
+        return True
+
+    def cut_selection(self) -> bool:
+        if not self.copy_selection():
+            return False
+        return self.delete_selection()
+
+    def paste_from_clipboard(self) -> bool:
+        mime = QGuiApplication.clipboard().mimeData()
+        if not mime.hasImage():
+            return False
+        image = mime.imageData()
+        if not isinstance(image, QImage) or image.isNull():
+            return False
+        self.action_started.emit()
+        pixmap = QPixmap.fromImage(image)
+        layer = self.document.add_layer(self.document.unique_name("Pasted"))
+        layer.pixmap.fill(Qt.GlobalColor.transparent)
+        QPainter(layer.pixmap).drawPixmap(0, 0, pixmap)
+        self.document_changed.emit()
+        self.update()
+        return True
+
     def _image_top_left(self) -> QPointF:
-        return QPointF(
-            (self.width() - self.document.width * self.zoom) / 2 + self.pan.x(),
-            (self.height() - self.document.height * self.zoom) / 2 + self.pan.y(),
-        )
+        return QPointF((self.width() - self.document.width * self.zoom) / 2 + self.pan.x(), (self.height() - self.document.height * self.zoom) / 2 + self.pan.y())
 
     def widget_to_canvas(self, pos: QPointF) -> QPoint | None:
         top_left = self._image_top_left()
@@ -150,7 +202,6 @@ class Canvas(QWidget):
         self._draw_checkerboard(painter, target)
         painter.drawPixmap(target, self.document.composite(QColor(0, 0, 0, 0)))
         painter.restore()
-
         painter.save()
         painter.translate(top_left)
         painter.scale(self.zoom, self.zoom)
@@ -159,7 +210,6 @@ class Canvas(QWidget):
         if self.selection_rect:
             self._draw_selection(painter, self.selection_rect)
         painter.restore()
-
         if self._hover_canvas_pos and self.tool in {Tool.BRUSH, Tool.ERASER}:
             center = self.canvas_to_widget(self._hover_canvas_pos)
             radius = max(0.5, self.brush_size * self.zoom / 2)
@@ -172,8 +222,7 @@ class Canvas(QWidget):
 
     def _draw_checkerboard(self, painter: QPainter, rect: QRectF) -> None:
         size = max(4, min(24, round(12 * self.zoom)))
-        left, top = int(rect.left()), int(rect.top())
-        right, bottom = int(rect.right()), int(rect.bottom())
+        left, top, right, bottom = int(rect.left()), int(rect.top()), int(rect.right()), int(rect.bottom())
         painter.fillRect(rect, QColor("#e8e8e8"))
         for y in range(top - top % size, bottom + size, size):
             for x in range(left - left % size, right + size, size):
@@ -284,14 +333,28 @@ class Canvas(QWidget):
         self.update()
 
     def keyPressEvent(self, event) -> None:
+        modifiers = event.modifiers()
         if event.key() == Qt.Key.Key_Escape:
             self._cancel_interaction()
-            self.update()
-            event.accept()
-            return
-        if event.key() == Qt.Key.Key_Space:
+        elif event.key() == Qt.Key.Key_Space:
             self.setCursor(Qt.CursorShape.OpenHandCursor)
-        super().keyPressEvent(event)
+        elif modifiers & Qt.KeyboardModifier.ControlModifier and event.key() == Qt.Key.Key_A:
+            self.select_all()
+        elif modifiers & Qt.KeyboardModifier.ControlModifier and event.key() == Qt.Key.Key_D:
+            self.deselect()
+        elif modifiers & Qt.KeyboardModifier.ControlModifier and event.key() == Qt.Key.Key_C:
+            self.copy_selection()
+        elif modifiers & Qt.KeyboardModifier.ControlModifier and event.key() == Qt.Key.Key_X:
+            self.cut_selection()
+        elif modifiers & Qt.KeyboardModifier.ControlModifier and event.key() == Qt.Key.Key_V:
+            self.paste_from_clipboard()
+        elif event.key() == Qt.Key.Key_Delete:
+            self.delete_selection()
+        else:
+            super().keyPressEvent(event)
+            return
+        event.accept()
+        self.update()
 
     def keyReleaseEvent(self, event) -> None:
         if event.key() == Qt.Key.Key_Space and not self._panning:
@@ -304,8 +367,7 @@ class Canvas(QWidget):
         return color
 
     def _draw_segment(self, start: QPoint, end: QPoint) -> None:
-        layer = self.document.active_layer
-        painter = QPainter(layer.pixmap)
+        painter = QPainter(self.document.active_layer.pixmap)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear if self.tool == Tool.ERASER else QPainter.CompositionMode.CompositionMode_SourceOver)
         color = QColor(0, 0, 0, 255) if self.tool == Tool.ERASER else self._paint_color()
@@ -338,9 +400,7 @@ class Canvas(QWidget):
         width, height = image.width(), image.height()
         while queue:
             x, y = queue.popleft()
-            if (x, y) in visited or not (0 <= x < width and 0 <= y < height):
-                continue
-            if image.pixelColor(x, y) != target:
+            if (x, y) in visited or not (0 <= x < width and 0 <= y < height) or image.pixelColor(x, y) != target:
                 continue
             visited.add((x, y))
             image.setPixelColor(x, y, replacement)
