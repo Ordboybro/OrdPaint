@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from pathlib import Path
 
 from PySide6.QtCore import QByteArray, QBuffer, QIODevice, Qt
@@ -19,14 +21,19 @@ class ProjectError(RuntimeError):
 def _encode_png(pixmap: QPixmap) -> str:
     data = QByteArray()
     buffer = QBuffer(data)
-    buffer.open(QIODevice.OpenModeFlag.WriteOnly)
-    if not pixmap.save(buffer, "PNG"):
-        raise ProjectError("Failed to encode layer")
-    buffer.close()
+    if not buffer.open(QIODevice.OpenModeFlag.WriteOnly):
+        raise ProjectError("Failed to open project image buffer")
+    try:
+        if not pixmap.save(buffer, "PNG"):
+            raise ProjectError("Failed to encode layer")
+    finally:
+        buffer.close()
     return bytes(data.toBase64()).decode("ascii")
 
 
 def _decode_png(value: str) -> QPixmap:
+    if not isinstance(value, str) or not value:
+        raise ProjectError("Invalid layer image data")
     raw = QByteArray.fromBase64(value.encode("ascii"))
     image = QImage.fromData(raw, "PNG")
     if image.isNull():
@@ -35,6 +42,7 @@ def _decode_png(value: str) -> QPixmap:
 
 
 def save_project(document: Document, path: str | Path) -> None:
+    destination = Path(path)
     payload = {
         "version": PROJECT_VERSION,
         "width": document.width,
@@ -52,7 +60,32 @@ def save_project(document: Document, path: str | Path) -> None:
             for layer in document.layers
         ],
     }
-    Path(path).write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    data = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=destination.parent,
+            prefix=f".{destination.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temporary:
+            temporary.write(data)
+            temporary.flush()
+            os.fsync(temporary.fileno())
+            temporary_path = temporary.name
+        os.replace(temporary_path, destination)
+        temporary_path = None
+    except OSError as exc:
+        raise ProjectError("Could not save project") from exc
+    finally:
+        if temporary_path:
+            try:
+                os.unlink(temporary_path)
+            except OSError:
+                pass
 
 
 def load_project(path: str | Path) -> Document:
@@ -60,29 +93,50 @@ def load_project(path: str | Path) -> Document:
         payload = json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ProjectError("Could not read project") from exc
-    if payload.get("version") != PROJECT_VERSION:
+
+    if not isinstance(payload, dict) or payload.get("version") != PROJECT_VERSION:
         raise ProjectError("Unsupported project version")
-    width = int(payload["width"])
-    height = int(payload["height"])
+
+    try:
+        width = int(payload["width"])
+        height = int(payload["height"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ProjectError("Invalid project dimensions") from exc
+
     raw_layers = payload.get("layers")
     if width < 1 or height < 1 or not isinstance(raw_layers, list) or not raw_layers:
         raise ProjectError("Invalid project structure")
+
     layers: list[Layer] = []
     for item in raw_layers:
-        pixmap = _decode_png(item["image"])
+        if not isinstance(item, dict):
+            raise ProjectError("Invalid layer structure")
+        pixmap = _decode_png(item.get("image", ""))
         if pixmap.size().width() != width or pixmap.size().height() != height:
             raise ProjectError("Layer dimensions do not match document")
         try:
-            blend_mode = Qt.CompositionMode(int(item.get("blend_mode", int(Qt.CompositionMode.CompositionMode_SourceOver.value))))
-        except ValueError:
+            blend_value = int(item.get("blend_mode", int(Qt.CompositionMode.CompositionMode_SourceOver.value)))
+            blend_mode = Qt.CompositionMode(blend_value)
+        except (TypeError, ValueError):
             blend_mode = Qt.CompositionMode.CompositionMode_SourceOver
-        layers.append(Layer(
-            name=str(item.get("name") or "Layer"),
-            pixmap=pixmap,
-            visible=bool(item.get("visible", True)),
-            opacity=max(0, min(100, int(item.get("opacity", 100)))),
-            blend_mode=blend_mode,
-            locked=bool(item.get("locked", False)),
-        ))
-    active_index = max(0, min(int(payload.get("active_index", 0)), len(layers) - 1))
+        try:
+            opacity = int(item.get("opacity", 100))
+        except (TypeError, ValueError) as exc:
+            raise ProjectError("Invalid layer opacity") from exc
+        layers.append(
+            Layer(
+                name=str(item.get("name") or "Layer"),
+                pixmap=pixmap,
+                visible=bool(item.get("visible", True)),
+                opacity=max(0, min(100, opacity)),
+                blend_mode=blend_mode,
+                locked=bool(item.get("locked", False)),
+            )
+        )
+
+    try:
+        active_index = int(payload.get("active_index", 0))
+    except (TypeError, ValueError) as exc:
+        raise ProjectError("Invalid active layer index") from exc
+    active_index = max(0, min(active_index, len(layers) - 1))
     return Document(width=width, height=height, layers=layers, active_index=active_index)
