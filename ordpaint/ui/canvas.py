@@ -4,7 +4,7 @@ from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QGuiApplication, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QWidget
 
-from ordpaint.core.clipboard import crop_image, from_pixmap
+from ordpaint.core.clipboard import crop_image
 from ordpaint.core.document import Document
 from ordpaint.core.raster import draw_line, draw_shape, flood_fill
 from ordpaint.core.selection import Selection, SelectionMode
@@ -152,17 +152,11 @@ class Canvas(QWidget):
         image = crop_image(self.document.active_layer.pixmap.toImage(), rect)
         if image.isNull():
             return False
-        item = from_pixmap(QPixmap.fromImage(image), rect, suggested_position=rect.topLeft())
-        mime = QGuiApplication.clipboard().mimeData().copy() if QGuiApplication.clipboard().mimeData() else None
-        del mime
-        clipboard = QGuiApplication.clipboard()
-        clipboard.setImage(item.image)
+        QGuiApplication.clipboard().setImage(image)
         return True
 
     def cut_selection(self) -> bool:
-        if not self.selection.active:
-            return False
-        if self.document.active_layer.locked:
+        if not self.selection.active or self.document.active_layer.locked:
             return False
         if not self.copy_selection():
             return False
@@ -193,7 +187,10 @@ class Canvas(QWidget):
             return False
         old = QRect(self.selection.rect)
         self.selection.move(dx, dy, self.document.width, self.document.height)
-        return old != self.selection.rect
+        changed = old != self.selection.rect
+        if changed:
+            self.update()
+        return changed
 
     def _image_top_left(self) -> QPointF:
         return QPointF(
@@ -464,7 +461,6 @@ class Canvas(QWidget):
         self.update()
 
     def _draw_shape(self, start: QPoint, end: QPoint) -> None:
-        rect = self._constrained_rect(start, end) if self._shift_pressed else self._normalized_rect(start, end)
         draw_shape(
             self.document.active_layer.pixmap,
             self.tool.value,
@@ -476,7 +472,6 @@ class Canvas(QWidget):
             clip=self.selection.rect,
         )
         self.document.touch()
-        del rect
 
     def _flood_fill(self, point: QPoint) -> None:
         changed = flood_fill(
