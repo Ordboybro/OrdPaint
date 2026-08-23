@@ -153,10 +153,11 @@ class Canvas(QWidget):
         if not isinstance(image, QImage) or image.isNull():
             return False
         self.action_started.emit()
-        pixmap = QPixmap.fromImage(image)
         layer = self.document.add_layer(self.document.unique_name("Pasted"))
         layer.pixmap.fill(Qt.GlobalColor.transparent)
-        QPainter(layer.pixmap).drawPixmap(0, 0, pixmap)
+        painter = QPainter(layer.pixmap)
+        painter.drawImage(0, 0, image)
+        painter.end()
         self.document_changed.emit()
         self.update()
         return True
@@ -269,6 +270,11 @@ class Canvas(QWidget):
             return
         if self.document.active_layer.locked:
             return
+        if self.tool == Tool.SELECT_RECT:
+            self._drawing = True
+            self._last_canvas_pos = point
+            self._start_canvas_pos = point
+            return
         self.action_started.emit()
         self._drawing = True
         self._last_canvas_pos = point
@@ -312,7 +318,7 @@ class Canvas(QWidget):
                 self._draw_shape(self._start_canvas_pos, self._last_canvas_pos)
             elif self.tool == Tool.SELECT_RECT:
                 self.selection_rect = self._constrained_rect(self._start_canvas_pos, self._last_canvas_pos) if self._shift_pressed else self._normalized_rect(self._start_canvas_pos, self._last_canvas_pos)
-        self._finish_action()
+        self._finish_action(emit_changed=self.tool != Tool.SELECT_RECT)
 
     def wheelEvent(self, event) -> None:
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
@@ -416,9 +422,10 @@ class Canvas(QWidget):
         self._start_canvas_pos = None
         self.unsetCursor()
 
-    def _finish_action(self) -> None:
+    def _finish_action(self, emit_changed: bool = True) -> None:
         self._drawing = False
         self._last_canvas_pos = None
         self._start_canvas_pos = None
-        self.document_changed.emit()
+        if emit_changed:
+            self.document_changed.emit()
         self.update()
