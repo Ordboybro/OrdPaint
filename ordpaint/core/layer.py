@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap
@@ -14,6 +14,14 @@ class Layer:
     opacity: int = 100
     blend_mode: Qt.CompositionMode = Qt.CompositionMode_SourceOver
     locked: bool = False
+
+    def __post_init__(self) -> None:
+        self.opacity = max(0, min(100, int(self.opacity)))
+        self.name = self.name.strip() or "Layer"
+
+    @property
+    def editable(self) -> bool:
+        return self.visible and not self.locked and not self.pixmap.isNull()
 
     def copy(self) -> "Layer":
         return Layer(
