@@ -82,6 +82,8 @@ class MainWindow(QMainWindow):
             old.deleteLater()
         self._refresh_layers()
         self._update_history_actions()
+        if hasattr(self, "document_size_label"):
+            self.document_size_label.setText(f"{self.document.width} × {self.document.height} px")
         self.canvas.update()
 
     def _create_actions(self) -> None:
@@ -397,6 +399,24 @@ class MainWindow(QMainWindow):
         name = Path(self.current_path).name if self.current_path else "Безымянный"
         marker = " •" if self.dirty else ""
         self.setWindowTitle(f"OrdPaint — {name}{marker}")
+
+    def undo(self) -> None:
+        document = self.history.undo(self.document)
+        if document is None:
+            return
+        self._replace_document(document)
+        self.dirty = self.history.is_dirty()
+        self._update_window_title()
+        self._update_history_actions()
+
+    def redo(self) -> None:
+        document = self.history.redo(self.document)
+        if document is None:
+            return
+        self._replace_document(document)
+        self.dirty = self.history.is_dirty()
+        self._update_window_title()
+        self._update_history_actions()
 
     def _update_history_actions(self) -> None:
         if hasattr(self, "undo_action"):
