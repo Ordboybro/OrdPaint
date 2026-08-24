@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
-from PySide6.QtCore import QPointF, QRect, QRectF, QSize
-from PySide6.QtGui import QImage
+from PySide6.QtCore import QPointF, QRect, QRectF, QSize, Qt
+from PySide6.QtGui import QImage, QPainter
 
 
 class TransformHandle(StrEnum):
@@ -120,6 +120,19 @@ class TransformState:
 
     def flip_vertical(self) -> None:
         self.image = self.image.mirrored(False, True)
+
+    def render_on(self, image: QImage, *, clear_source: bool = False) -> QImage:
+        """Return a copy of *image* with the transform raster composited onto it."""
+        result = image.copy()
+        painter = QPainter(result)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+        if clear_source and self.source_rect is not None:
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear)
+            painter.fillRect(self.source_rect, Qt.GlobalColor.transparent)
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+        painter.drawImage(self.rect, self.image)
+        painter.end()
+        return result
 
     def to_int_rect(self) -> QRect:
         return self.rect.toAlignedRect()
