@@ -61,6 +61,23 @@ def test_flip_horizontal_changes_pixel_order():
     assert state.image.pixelColor(1, 0) == QColor("#ff0000")
 
 
+def test_render_on_can_clear_source_before_drawing_transform():
+    source = image(8, 4)
+    source.fill(QColor("#ff0000"))
+    floating = image(2, 2)
+    floating.fill(QColor("#0000ff"))
+    state = TransformState.from_image(
+        floating,
+        QPointF(4, 1),
+        source_rect=QRect(0, 0, 2, 2),
+    )
+
+    result = state.render_on(source, clear_source=True)
+
+    assert result.pixelColor(0, 0).alpha() == 0
+    assert result.pixelColor(4, 1) == QColor("#0000ff")
+
+
 def test_copy_keeps_source_metadata_independent():
     state = TransformState.from_image(
         image(),
