@@ -670,6 +670,7 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Ошибка сохранения", str(exc))
             return
         self.current_path = path
+        self.history.mark_saved()
         self.dirty = False
         self.statusBar().showMessage("Проект сохранён", 3000)
         self._update_window_title()
