@@ -5,7 +5,9 @@ from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QActionGroup, QColor, QIcon, QKeySequence, QPixmap
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QColorDialog,
+    QComboBox,
     QDockWidget,
     QFileDialog,
     QGridLayout,
@@ -30,6 +32,17 @@ from ordpaint.core.tools import TOOL_INFO, Tool
 from ordpaint.ui.canvas import Canvas
 
 
+BLEND_MODES: tuple[tuple[str, Qt.CompositionMode], ...] = (
+    ("Обычный", Qt.CompositionMode.CompositionMode_SourceOver),
+    ("Умножение", Qt.CompositionMode.CompositionMode_Multiply),
+    ("Экран", Qt.CompositionMode.CompositionMode_Screen),
+    ("Перекрытие", Qt.CompositionMode.CompositionMode_Overlay),
+    ("Затемнение", Qt.CompositionMode.CompositionMode_Darken),
+    ("Осветление", Qt.CompositionMode.CompositionMode_Lighten),
+    ("Разница", Qt.CompositionMode.CompositionMode_Difference),
+)
+
+
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
@@ -37,7 +50,7 @@ class MainWindow(QMainWindow):
         self.history = History()
         self.current_path: str | None = None
         self.dirty = False
-        self.setWindowTitle("OrdPaint — Untitled")
+        self.setWindowTitle("OrdPaint — Безымянный")
         self.resize(1500, 950)
         self._create_canvas()
         self._create_actions()
@@ -59,12 +72,12 @@ class MainWindow(QMainWindow):
         self.canvas.action_started.connect(self._push_history)
         self.canvas.zoom_changed.connect(self._update_zoom_labels)
         self.canvas.document_changed.connect(self._on_document_changed)
-        self.canvas.cursor_position_changed.connect(
-            lambda p: self.position_label.setText(f"X: {p.x()}  Y: {p.y()}")
-            if hasattr(self, "position_label")
-            else None
-        )
+        self.canvas.cursor_position_changed.connect(self._update_cursor_position)
         self.canvas.color_picked.connect(self._set_color_from_canvas)
+
+    def _update_cursor_position(self, point) -> None:
+        if hasattr(self, "position_label"):
+            self.position_label.setText(f"X: {point.x()}  Y: {point.y()}")
 
     def _update_zoom_labels(self, value: int) -> None:
         if hasattr(self, "zoom_label"):
@@ -74,12 +87,47 @@ class MainWindow(QMainWindow):
 
     def _replace_document(self, document: Document) -> None:
         old = self.centralWidget()
+        state = None
+        if isinstance(old, Canvas):
+            state = {
+                "color": QColor(old.color),
+                "brush_size": old.brush_size,
+                "opacity": old.opacity,
+                "tool": old.tool,
+                "show_grid": old.show_grid,
+                "show_rulers": old.show_rulers,
+                "grid_size": old.grid_size,
+            }
         self.document = document
         self.canvas = Canvas(self.document)
+        if state:
+            self.canvas.set_color(state["color"])
+            self.canvas.set_brush_size(state["brush_size"])
+            self.canvas.set_opacity(state["opacity"])
+            self.canvas.set_show_grid(state["show_grid"])
+            self.canvas.set_show_rulers(state["show_rulers"])
+            self.canvas.set_grid_size(state["grid_size"])
+            self.canvas.set_tool(state["tool"])
         self.setCentralWidget(self.canvas)
         self._connect_canvas()
         if old:
             old.deleteLater()
+        if hasattr(self, "grid_action"):
+            self.grid_action.setChecked(self.canvas.show_grid)
+            self.rulers_action.setChecked(self.canvas.show_rulers)
+        if hasattr(self, "size_spin"):
+            self.size_spin.blockSignals(True)
+            self.size_spin.setValue(self.canvas.brush_size)
+            self.size_spin.blockSignals(False)
+            self.size_slider.blockSignals(True)
+            self.size_slider.setValue(self.canvas.brush_size)
+            self.size_slider.blockSignals(False)
+            self.opacity_slider.blockSignals(True)
+            self.opacity_slider.setValue(self.canvas.opacity)
+            self.opacity_slider.blockSignals(False)
+            self.opacity_value.setText(f"{self.canvas.opacity}%")
+            self._sync_color_sliders(self.canvas.color)
+            self._update_color_button(self.canvas.color)
         self._refresh_layers()
         self._update_history_actions()
         if hasattr(self, "document_size_label"):
@@ -91,15 +139,42 @@ class MainWindow(QMainWindow):
         self.open_action = QAction("Открыть…", self, shortcut=QKeySequence.Open, triggered=self.open_project)
         self.import_action = QAction("Импортировать изображение…", self, triggered=self.open_image)
         self.save_action = QAction("Сохранить", self, shortcut=QKeySequence.Save, triggered=self.save_project)
-        self.save_as_action = QAction("Сохранить как…", self, shortcut=QKeySequence.SaveAs, triggered=self.save_project_as)
+        self.save_as_action = QAction(
+            "Сохранить как…",
+            self,
+            shortcut=QKeySequence.SaveAs,
+            triggered=self.save_project_as,
+        )
         self.export_action = QAction("Экспортировать изображение…", self, triggered=self.export_image)
         self.exit_action = QAction("Выход", self, shortcut=QKeySequence.Quit, triggered=self.close)
+
         self.undo_action = QAction("Отменить", self, shortcut=QKeySequence.Undo, triggered=self.undo)
         self.redo_action = QAction("Повторить", self, shortcut=QKeySequence.Redo, triggered=self.redo)
+        self.copy_action = QAction("Копировать", self, shortcut=QKeySequence.Copy, triggered=self.canvas.copy_selection)
+        self.cut_action = QAction("Вырезать", self, shortcut=QKeySequence.Cut, triggered=self.canvas.cut_selection)
+        self.paste_action = QAction("Вставить", self, shortcut=QKeySequence.Paste, triggered=self.canvas.paste_from_clipboard)
+        self.delete_action = QAction("Удалить", self, shortcut=QKeySequence.Delete, triggered=self.canvas.delete_selection)
+        self.select_all_action = QAction("Выделить всё", self, shortcut=QKeySequence.SelectAll, triggered=self.canvas.select_all)
+        self.deselect_action = QAction("Снять выделение", self, shortcut="Ctrl+D", triggered=self.canvas.deselect)
+
         self.zoom_in_action = QAction("Увеличить", self, shortcut=QKeySequence.ZoomIn, triggered=self.canvas.zoom_in)
         self.zoom_out_action = QAction("Уменьшить", self, shortcut=QKeySequence.ZoomOut, triggered=self.canvas.zoom_out)
         self.reset_view_action = QAction("100%", self, shortcut="Ctrl+0", triggered=self.canvas.reset_view)
-        self.fit_view_action = QAction("По размеру окна", self, shortcut="Ctrl+Shift+0", triggered=self.canvas.fit_to_window)
+        self.fit_view_action = QAction(
+            "По размеру окна",
+            self,
+            shortcut="Ctrl+Shift+0",
+            triggered=self.canvas.fit_to_window,
+        )
+        self.grid_action = QAction("Сетка", self, checkable=True, shortcut="Ctrl+'", triggered=self.canvas.set_show_grid)
+        self.rulers_action = QAction(
+            "Линейки",
+            self,
+            checkable=True,
+            shortcut="Ctrl+R",
+            checked=True,
+            triggered=self.canvas.set_show_rulers,
+        )
 
         self.tool_actions: dict[Tool, QAction] = {}
         group = QActionGroup(self)
@@ -142,25 +217,42 @@ class MainWindow(QMainWindow):
 
         edit_menu = self.menuBar().addMenu("Правка")
         edit_menu.addActions([self.undo_action, self.redo_action])
+        edit_menu.addSeparator()
+        edit_menu.addActions([self.copy_action, self.cut_action, self.paste_action, self.delete_action])
+        edit_menu.addSeparator()
+        edit_menu.addActions([self.select_all_action, self.deselect_action])
+
+        view_menu = self.menuBar().addMenu("Вид")
+        view_menu.addActions(
+            [
+                self.zoom_in_action,
+                self.zoom_out_action,
+                self.reset_view_action,
+                self.fit_view_action,
+                self.grid_action,
+                self.rulers_action,
+            ]
+        )
+
+        image_menu = self.menuBar().addMenu("Изображение")
+        image_menu.addAction(self.import_action)
+        image_menu.addAction("Очистить активный слой", self.clear_active_layer)
 
         layer_menu = self.menuBar().addMenu("Слой")
         layer_menu.addActions(
             [
-                QAction("Новый слой", self, triggered=self.add_layer),
-                QAction("Дублировать слой", self, triggered=self.duplicate_layer),
+                QAction("Новый слой", self, shortcut="Ctrl+Shift+N", triggered=self.add_layer),
+                QAction("Дублировать слой", self, shortcut="Ctrl+J", triggered=self.duplicate_layer),
                 QAction("Удалить слой", self, triggered=self.remove_layer),
-                QAction("Переместить вверх", self, triggered=lambda: self.move_layer(1)),
-                QAction("Переместить вниз", self, triggered=lambda: self.move_layer(-1)),
-                QAction("Объединить с нижним", self, triggered=self.merge_layer_down),
+                QAction("Переместить вверх", self, shortcut="Ctrl+]", triggered=lambda: self.move_layer(1)),
+                QAction("Переместить вниз", self, shortcut="Ctrl+[", triggered=lambda: self.move_layer(-1)),
+                QAction("Объединить с нижним", self, shortcut="Ctrl+E", triggered=self.merge_layer_down),
                 QAction("Объединить видимые", self, triggered=self.merge_visible_layers),
             ]
         )
 
         tools_menu = self.menuBar().addMenu("Инструменты")
         tools_menu.addActions(self.tool_actions.values())
-
-        view_menu = self.menuBar().addMenu("Вид")
-        view_menu.addActions([self.zoom_in_action, self.zoom_out_action, self.reset_view_action, self.fit_view_action])
 
     def _create_tool_button(self, action: QAction, text: str) -> QToolButton:
         button = QToolButton()
@@ -174,7 +266,12 @@ class MainWindow(QMainWindow):
         file_bar = self.addToolBar("Файл")
         file_bar.setObjectName("fileToolbar")
         file_bar.setMovable(False)
-        for action, glyph in ((self.new_action, "▣"), (self.open_action, "▰"), (self.save_action, "▣"), (self.export_action, "⇧")):
+        for action, glyph in (
+            (self.new_action, "▣"),
+            (self.open_action, "▰"),
+            (self.save_action, "▣"),
+            (self.export_action, "⇧"),
+        ):
             button = self._create_tool_button(action, glyph)
             button.setToolTip(action.text())
             file_bar.addWidget(button)
@@ -191,7 +288,10 @@ class MainWindow(QMainWindow):
         self.zoom_label = QLabel("100%")
         self.zoom_label.setObjectName("zoomValue")
         view_bar.addWidget(self.zoom_label)
-        for action, glyph, tip in ((self.fit_view_action, "⊙", "По размеру окна"), (self.reset_view_action, "100", "100%")):
+        for action, glyph, tip in (
+            (self.fit_view_action, "⊙", "По размеру окна"),
+            (self.reset_view_action, "100", "100%"),
+        ):
             button = QToolButton()
             button.setDefaultAction(action)
             button.setText(glyph)
@@ -212,7 +312,16 @@ class MainWindow(QMainWindow):
         grid = QGridLayout()
         grid.setHorizontalSpacing(8)
         grid.setVerticalSpacing(8)
-        glyphs = {Tool.BRUSH: "╱", Tool.ERASER: "◇", Tool.LINE: "╲", Tool.RECTANGLE: "□", Tool.ELLIPSE: "○", Tool.FILL: "▾", Tool.EYEDROPPER: "⌖", Tool.SELECT_RECT: "⬚"}
+        glyphs = {
+            Tool.BRUSH: "╱",
+            Tool.ERASER: "◇",
+            Tool.LINE: "╲",
+            Tool.RECTANGLE: "□",
+            Tool.ELLIPSE: "○",
+            Tool.FILL: "▾",
+            Tool.EYEDROPPER: "⌖",
+            Tool.SELECT_RECT: "⬚",
+        }
         for index, tool in enumerate(TOOL_INFO):
             button = QToolButton()
             button.setDefaultAction(self.tool_actions[tool])
@@ -287,13 +396,19 @@ class MainWindow(QMainWindow):
         self.layers_list = QListWidget()
         self.layers_list.setObjectName("layersList")
         self.layers_list.setMinimumHeight(220)
+        self.layers_list.setEditTriggers(QAbstractItemView.EditTrigger.DoubleClicked)
         self.layers_list.currentRowChanged.connect(self._set_active_layer)
-        self.layers_list.itemChanged.connect(self._change_layer_visibility)
-        self.layers_list.itemDoubleClicked.connect(self._rename_layer_item)
+        self.layers_list.itemChanged.connect(self._layer_item_changed)
         layout.addWidget(self.layers_list)
 
         controls = QHBoxLayout()
-        for text_value, slot, tooltip in [("+", self.add_layer, "Новый слой"), ("⧉", self.duplicate_layer, "Дублировать"), ("↑", lambda: self.move_layer(1), "Выше"), ("↓", lambda: self.move_layer(-1), "Ниже"), ("⌫", self.remove_layer, "Удалить")]:
+        for text_value, slot, tooltip in (
+            ("+", self.add_layer, "Новый слой"),
+            ("⧉", self.duplicate_layer, "Дублировать"),
+            ("↑", lambda: self.move_layer(1), "Выше"),
+            ("↓", lambda: self.move_layer(-1), "Ниже"),
+            ("⌫", self.remove_layer, "Удалить"),
+        ):
             button = QToolButton()
             button.setText(text_value)
             button.setToolTip(tooltip)
@@ -301,6 +416,15 @@ class MainWindow(QMainWindow):
             button.clicked.connect(slot)
             controls.addWidget(button)
         layout.addLayout(controls)
+
+        blend_row = QHBoxLayout()
+        blend_row.addWidget(QLabel("Режим"))
+        self.blend_mode_combo = QComboBox()
+        for label, mode in BLEND_MODES:
+            self.blend_mode_combo.addItem(label, mode)
+        self.blend_mode_combo.currentIndexChanged.connect(self._set_active_layer_blend_mode)
+        blend_row.addWidget(self.blend_mode_combo, 1)
+        layout.addLayout(blend_row)
 
         opacity_row = QHBoxLayout()
         opacity_row.addWidget(QLabel("Непрозрачность"))
@@ -356,12 +480,16 @@ class MainWindow(QMainWindow):
         palette_title.setObjectName("panelSectionTitle")
         layout.addWidget(palette_title)
         swatches = QGridLayout()
-        for index, color in enumerate(["#ff6b00", "#f4f4f4", "#9da9b5", "#4f8fe8", "#26384d", "#0f1115", "#d14b4b", "#5fb878"]):
+        for index, color in enumerate(
+            ["#ff6b00", "#f4f4f4", "#9da9b5", "#4f8fe8", "#26384d", "#0f1115", "#d14b4b", "#5fb878"]
+        ):
             button = QPushButton()
             button.setObjectName("swatch")
             button.setFixedSize(26, 26)
             button.setStyleSheet(f"QPushButton {{ background: {color}; }}")
-            button.clicked.connect(lambda checked=False, value=color: self._set_color_from_canvas(QColor(value)))
+            button.clicked.connect(
+                lambda checked=False, value=color: self._set_color_from_canvas(QColor(value))
+            )
             swatches.addWidget(button, index // 4, index % 4)
         layout.addLayout(swatches)
         layout.addStretch(1)
@@ -392,6 +520,7 @@ class MainWindow(QMainWindow):
     def _on_document_changed(self) -> None:
         self.dirty = True
         self._refresh_layers()
+        self._update_history_actions()
         self.canvas.update()
         self._update_window_title()
 
@@ -433,10 +562,16 @@ class MainWindow(QMainWindow):
         self.layers_list.blockSignals(True)
         self.layers_list.clear()
         for layer in reversed(self.document.layers):
-            thumbnail = layer.pixmap.scaled(38, 38, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            thumbnail = layer.pixmap.scaled(
+                38,
+                38,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
             item = QListWidgetItem(QIcon(thumbnail), layer.name)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
             item.setCheckState(Qt.CheckState.Checked if layer.visible else Qt.CheckState.Unchecked)
-            item.setToolTip("Заблокирован" if layer.locked else "Редактируемый слой")
+            item.setToolTip("Заблокирован" if layer.locked else "Двойной клик для переименования")
             self.layers_list.addItem(item)
         row = len(self.document.layers) - 1 - self.document.active_index
         self.layers_list.setCurrentRow(row)
@@ -451,7 +586,14 @@ class MainWindow(QMainWindow):
             self.lock_button.setChecked(layer.locked)
             self.lock_button.setText("🔒  Слой заблокирован" if layer.locked else "🔓  Заблокировать слой")
             self.lock_button.blockSignals(False)
-            self.layer_status_label.setText(layer.name)
+            self.blend_mode_combo.blockSignals(True)
+            for index in range(self.blend_mode_combo.count()):
+                if self.blend_mode_combo.itemData(index) == layer.blend_mode:
+                    self.blend_mode_combo.setCurrentIndex(index)
+                    break
+            self.blend_mode_combo.blockSignals(False)
+            if hasattr(self, "layer_status_label"):
+                self.layer_status_label.setText(layer.name)
 
     def _set_active_layer(self, row: int) -> None:
         if row < 0 or row >= len(self.document.layers):
@@ -460,33 +602,26 @@ class MainWindow(QMainWindow):
         self._refresh_layers()
         self.canvas.update()
 
-    def _change_layer_visibility(self, item: QListWidgetItem) -> None:
+    def _layer_item_changed(self, item: QListWidgetItem) -> None:
         row = self.layers_list.row(item)
         if row < 0:
             return
         index = len(self.document.layers) - 1 - row
-        new_value = item.checkState() == Qt.CheckState.Checked
-        if self.document.layers[index].visible == new_value:
-            return
-        self._push_history()
-        self.document.set_layer_visibility(index, new_value)
-        self.dirty = True
-        self._update_window_title()
-        self.canvas.update()
-
-    def _rename_layer_item(self, item: QListWidgetItem) -> None:
-        row = self.layers_list.row(item)
-        index = len(self.document.layers) - 1 - row
-        old_name = self.document.layers[index].name
-        name = item.text().strip()
-        if not name or name == old_name:
-            item.setText(old_name)
-            return
-        self._push_history()
-        self.document.layers[index].name = self.document.unique_name(name) if name != old_name else name
-        self.dirty = True
-        self._refresh_layers()
-        self._update_window_title()
+        layer = self.document.layers[index]
+        new_visible = item.checkState() == Qt.CheckState.Checked
+        if layer.visible != new_visible:
+            self._push_history()
+            self.document.set_layer_visibility(index, new_visible)
+            self.dirty = True
+            self._update_window_title()
+            self.canvas.update()
+        new_name = item.text().strip()
+        if new_name and new_name != layer.name:
+            self._push_history()
+            self.document.rename_layer(index, new_name)
+            self.dirty = True
+            self._refresh_layers()
+            self._update_window_title()
 
     def _begin_layer_opacity_transaction(self) -> None:
         self.history.begin_transaction(self.document)
@@ -509,7 +644,23 @@ class MainWindow(QMainWindow):
             self._update_history_actions()
         self._refresh_layers()
 
+    def _set_active_layer_blend_mode(self, combo_index: int) -> None:
+        if combo_index < 0:
+            return
+        mode = self.blend_mode_combo.itemData(combo_index)
+        if not isinstance(mode, Qt.CompositionMode):
+            mode = Qt.CompositionMode(mode)
+        if self.document.active_layer.blend_mode == mode:
+            return
+        self._push_history()
+        if self.document.set_layer_blend_mode(self.document.active_index, mode):
+            self.dirty = True
+            self._update_window_title()
+            self.canvas.update()
+
     def _toggle_active_layer_lock(self, checked: bool) -> None:
+        if self.document.active_layer.locked == checked:
+            return
         self._push_history()
         self.document.set_layer_locked(self.document.active_index, checked)
         self.dirty = True
@@ -554,7 +705,7 @@ class MainWindow(QMainWindow):
         self._update_window_title()
 
     def merge_layer_down(self) -> None:
-        if self.document.active_index <= 0:
+        if self.document.active_index <= 0 or self.document.layers[self.document.active_index - 1].locked:
             return
         self._push_history()
         if self.document.merge_active_down():
@@ -564,13 +715,24 @@ class MainWindow(QMainWindow):
             self._update_window_title()
 
     def merge_visible_layers(self) -> None:
-        if sum(layer.visible for layer in self.document.layers) <= 1:
+        visible = [layer for layer in self.document.layers if layer.visible]
+        if len(visible) <= 1 or visible[0].locked:
             return
         self._push_history()
         if self.document.merge_visible():
             self.dirty = True
             self._refresh_layers()
             self.canvas.update()
+            self._update_window_title()
+
+    def clear_active_layer(self) -> None:
+        if self.document.active_layer.locked:
+            return
+        self._push_history()
+        if self.document.clear_active_layer():
+            self.dirty = True
+            self.canvas.update()
+            self._refresh_layers()
             self._update_window_title()
 
     def choose_color(self) -> None:
@@ -584,6 +746,8 @@ class MainWindow(QMainWindow):
         self._update_color_button(color)
 
     def _sync_color_sliders(self, color: QColor) -> None:
+        if not hasattr(self, "red_slider"):
+            return
         for slider, value in (
             (self.red_slider, color.red()),
             (self.green_slider, color.green()),
@@ -602,7 +766,9 @@ class MainWindow(QMainWindow):
     def _update_color_button(self, color: QColor) -> None:
         text_color = "#ffffff" if color.lightness() < 128 else "#111111"
         self.color_button.setText(color.name().upper())
-        self.color_button.setStyleSheet(f"background:{color.name()}; color:{text_color}; border: 1px solid #4a4f59;")
+        self.color_button.setStyleSheet(
+            f"background:{color.name()}; color:{text_color}; border: 1px solid #4a4f59;"
+        )
 
     def new_document(self) -> None:
         if not self._confirm_discard():
@@ -611,9 +777,12 @@ class MainWindow(QMainWindow):
         self.current_path = None
         self.dirty = False
         self._replace_document(Document())
+        self.history.mark_saved()
         self._update_window_title()
 
     def open_project(self) -> None:
+        if not self._confirm_discard():
+            return
         path, _ = QFileDialog.getOpenFileName(self, "Открыть проект", "", "OrdPaint Project (*.ordpaint)")
         if not path:
             return
@@ -623,12 +792,15 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Не удалось открыть проект", str(exc))
             return
         self.history.clear()
+        self.history.mark_saved()
         self.current_path = path
         self.dirty = False
         self._replace_document(document)
         self._update_window_title()
 
     def open_image(self) -> None:
+        if not self._confirm_discard():
+            return
         path, _ = QFileDialog.getOpenFileName(
             self,
             "Импортировать изображение",
@@ -644,6 +816,7 @@ class MainWindow(QMainWindow):
         self.history.clear()
         document = Document(pixmap.width(), pixmap.height())
         document.active_layer.pixmap = pixmap
+        document.touch()
         self.current_path = None
         self.dirty = True
         self._replace_document(document)
@@ -656,7 +829,12 @@ class MainWindow(QMainWindow):
             self.save_project_as()
 
     def save_project_as(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(self, "Сохранить проект", "", "OrdPaint Project (*.ordpaint)")
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Сохранить проект",
+            "",
+            "OrdPaint Project (*.ordpaint)",
+        )
         if not path:
             return
         if not path.lower().endswith(".ordpaint"):
@@ -676,7 +854,7 @@ class MainWindow(QMainWindow):
         self._update_window_title()
 
     def export_image(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(
+        path, selected_filter = QFileDialog.getSaveFileName(
             self,
             "Экспортировать изображение",
             "",
@@ -684,6 +862,14 @@ class MainWindow(QMainWindow):
         )
         if not path:
             return
+        suffixes = {
+            "PNG (*.png)": ".png",
+            "JPEG (*.jpg *.jpeg)": ".jpg",
+            "WEBP (*.webp)": ".webp",
+            "BMP (*.bmp)": ".bmp",
+        }
+        if not Path(path).suffix:
+            path += suffixes.get(selected_filter, ".png")
         if not self.document.composite().save(path):
             QMessageBox.warning(self, "Ошибка", "Не удалось экспортировать изображение.")
             return
@@ -737,9 +923,10 @@ class MainWindow(QMainWindow):
         QListWidget { background: #141a22; border: 1px solid #303a47; border-radius: 6px; color: #e1e6ed; outline: none; }
         QListWidget::item { min-height: 42px; padding: 4px; border-bottom: 1px solid #222c38; }
         QListWidget::item:selected { background: #3a291a; color: #fff2dd; }
-        QPushButton, QSpinBox { background: #202934; border: 1px solid #3a4654; border-radius: 6px; color: #e7ebf0; padding: 6px 9px; }
-        QPushButton:hover, QSpinBox:hover { background: #293441; border-color: #4d5b6d; }
+        QPushButton, QSpinBox, QComboBox { background: #202934; border: 1px solid #3a4654; border-radius: 6px; color: #e7ebf0; padding: 6px 9px; }
+        QPushButton:hover, QSpinBox:hover, QComboBox:hover { background: #293441; border-color: #4d5b6d; }
         QPushButton:checked { background: #3a291a; border-color: #d58a38; }
+        QComboBox QAbstractItemView { background: #202934; color: #e7ebf0; selection-background-color: #3a291a; }
         QPushButton#primaryColorButton, QPushButton#foregroundPreview { border-radius: 7px; }
         QSlider::groove:horizontal { height: 4px; background: #303a46; border-radius: 2px; }
         QSlider::sub-page:horizontal { background: #c8782f; border-radius: 2px; }
