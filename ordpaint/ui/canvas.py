@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QGuiApplication, QImage, QPainter, QPen, QPixmap
+from PySide6.QtGui import QColor, QFontMetrics, QGuiApplication, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QWidget
 
 from ordpaint.core.clipboard import crop_image
@@ -12,7 +12,7 @@ from ordpaint.core.tools import Tool
 
 
 class Canvas(QWidget):
-    """Interactive document viewport and input layer for the paint engine."""
+    """Interactive document viewport, overlays and input layer for the paint engine."""
 
     action_started = Signal()
     zoom_changed = Signal(int)
@@ -22,6 +22,7 @@ class Canvas(QWidget):
 
     MIN_ZOOM = 0.05
     MAX_ZOOM = 16.0
+    RULER_SIZE = 22
 
     def __init__(self, document: Document, parent=None) -> None:
         super().__init__(parent)
@@ -33,6 +34,10 @@ class Canvas(QWidget):
         self.opacity = 100
         self.tool = Tool.BRUSH
         self.selection = Selection()
+        self.show_grid = False
+        self.show_rulers = True
+        self.grid_size = 32
+
         self._drawing = False
         self._panning = False
         self._space_pan = False
@@ -82,6 +87,18 @@ class Canvas(QWidget):
         self.opacity = max(1, min(100, int(opacity)))
         self.update()
 
+    def set_show_grid(self, visible: bool) -> None:
+        self.show_grid = bool(visible)
+        self.update()
+
+    def set_show_rulers(self, visible: bool) -> None:
+        self.show_rulers = bool(visible)
+        self.update()
+
+    def set_grid_size(self, size: int) -> None:
+        self.grid_size = max(2, min(2048, int(size)))
+        self.update()
+
     def set_zoom(self, zoom: float, anchor: QPointF | None = None) -> None:
         old_zoom = self.zoom
         new_zoom = max(self.MIN_ZOOM, min(self.MAX_ZOOM, float(zoom)))
@@ -92,7 +109,10 @@ class Canvas(QWidget):
             self.zoom = new_zoom
             if before is not None:
                 top_left = self._image_top_left()
-                target = QPointF(top_left.x() + before.x() * self.zoom, top_left.y() + before.y() * self.zoom)
+                target = QPointF(
+                    top_left.x() + before.x() * self.zoom,
+                    top_left.y() + before.y() * self.zoom,
+                )
                 self.pan += anchor - target
         else:
             self.zoom = new_zoom
@@ -112,8 +132,9 @@ class Canvas(QWidget):
         self.update()
 
     def fit_to_window(self) -> None:
-        available_width = max(1, self.width() - 80)
-        available_height = max(1, self.height() - 80)
+        ruler = self.RULER_SIZE if self.show_rulers else 0
+        available_width = max(1, self.width() - 80 - ruler)
+        available_height = max(1, self.height() - 80 - ruler)
         zoom = min(available_width / self.document.width, available_height / self.document.height)
         self.pan = QPointF()
         self.zoom = max(self.MIN_ZOOM, min(self.MAX_ZOOM, zoom))
@@ -173,16 +194,22 @@ class Canvas(QWidget):
         image = clipboard.image()
         if image.isNull():
             return False
-        position = self.selection.rect.topLeft() if self.selection.active else QPoint(0, 0)
+        if self.selection.active:
+            position = self.selection.rect.topLeft()
+        else:
+            position = QPoint(
+                max(0, (self.document.width - image.width()) // 2),
+                max(0, (self.document.height - image.height()) // 2),
+            )
         self.action_started.emit()
         layer = self.document.add_layer(self.document.unique_name("Pasted"))
-        layer.pixmap.fill(Qt.GlobalColor.transparent)
         painter = QPainter(layer.pixmap)
         painter.drawImage(position, image)
         painter.end()
         self.document.touch()
         self.document_changed.emit()
-        self.set_tool(Tool.BRUSH)
+        self.selection.set_rect(QRect(position, image.size()))
+        self.set_tool(Tool.SELECT_RECT)
         self.update()
         return True
 
@@ -227,19 +254,33 @@ class Canvas(QWidget):
         dx = end.x() - start.x()
         dy = end.y() - start.y()
         side = max(abs(dx), abs(dy))
-        return QRect(start, QPoint(start.x() + (side if dx >= 0 else -side), start.y() + (side if dy >= 0 else -side))).normalized()
+        return QRect(
+            start,
+            QPoint(
+                start.x() + (side if dx >= 0 else -side),
+                start.y() + (side if dy >= 0 else -side),
+            ),
+        ).normalized()
 
     def paintEvent(self, event) -> None:
         del event
         painter = QPainter(self)
         painter.fillRect(self.rect(), QColor("#202124"))
         top_left = self._image_top_left()
-        target = QRectF(top_left.x(), top_left.y(), self.document.width * self.zoom, self.document.height * self.zoom)
+        target = QRectF(
+            top_left.x(),
+            top_left.y(),
+            self.document.width * self.zoom,
+            self.document.height * self.zoom,
+        )
         painter.save()
         painter.setClipRect(self.rect())
         self._draw_checkerboard(painter, target)
         painter.drawPixmap(target, self.document.composite(QColor(0, 0, 0, 0)))
+        if self.show_grid:
+            self._draw_grid(painter, target)
         painter.restore()
+
         painter.save()
         painter.translate(top_left)
         painter.scale(self.zoom, self.zoom)
@@ -253,29 +294,128 @@ class Canvas(QWidget):
         if self.selection.active:
             self._draw_selection(painter, self.selection.rect)
         painter.restore()
+
         if self._hover_canvas_pos and self.tool in {Tool.BRUSH, Tool.ERASER}:
             center = self.canvas_to_widget(self._hover_canvas_pos)
             radius = max(0.5, self.brush_size * self.zoom / 2)
             painter.setPen(QPen(QColor("#ffffff"), 1))
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawEllipse(center, radius, radius)
+
         painter.setPen(QPen(QColor("#4a4d52"), 1))
         painter.drawRect(target)
+        if self.show_rulers:
+            self._draw_rulers(painter, target)
         painter.end()
 
     def _draw_checkerboard(self, painter: QPainter, rect: QRectF) -> None:
         size = max(4, min(24, round(12 * self.zoom)))
-        left, top, right, bottom = int(rect.left()), int(rect.top()), int(rect.right()), int(rect.bottom())
+        left, top = int(rect.left()), int(rect.top())
+        right, bottom = int(rect.right()), int(rect.bottom())
         painter.fillRect(rect, QColor("#e8e8e8"))
         for y in range(top - top % size, bottom + size, size):
             for x in range(left - left % size, right + size, size):
                 if ((x // size) + (y // size)) % 2 == 0:
                     painter.fillRect(x, y, size, size, QColor("#d0d0d0"))
 
+    def _draw_grid(self, painter: QPainter, target: QRectF) -> None:
+        spacing = self.grid_size * self.zoom
+        if spacing < 6:
+            return
+        painter.save()
+        painter.setClipRect(target)
+        major = QPen(QColor(104, 116, 132, 130), 1)
+        minor = QPen(QColor(92, 104, 120, 75), 1)
+        show_minor = spacing >= 12
+        for x in range(0, self.document.width + 1, self.grid_size):
+            widget_x = target.left() + x * self.zoom
+            painter.setPen(major if x % (self.grid_size * 5) == 0 else minor)
+            if show_minor or x % (self.grid_size * 5) == 0:
+                painter.drawLine(QPointF(widget_x, target.top()), QPointF(widget_x, target.bottom()))
+        for y in range(0, self.document.height + 1, self.grid_size):
+            widget_y = target.top() + y * self.zoom
+            painter.setPen(major if y % (self.grid_size * 5) == 0 else minor)
+            if show_minor or y % (self.grid_size * 5) == 0:
+                painter.drawLine(QPointF(target.left(), widget_y), QPointF(target.right(), widget_y))
+        painter.restore()
+
+    @staticmethod
+    def _ruler_step(zoom: float) -> int:
+        for step in (1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000):
+            if step * zoom >= 42:
+                return step
+        return 5000
+
+    def _draw_rulers(self, painter: QPainter, target: QRectF) -> None:
+        size = self.RULER_SIZE
+        step = self._ruler_step(self.zoom)
+        major_step = step * 5
+        top_rect = QRectF(target.left(), target.top() - size, target.width(), size)
+        left_rect = QRectF(target.left() - size, target.top(), size, target.height())
+        painter.save()
+        painter.fillRect(top_rect, QColor("#171d26"))
+        painter.fillRect(left_rect, QColor("#171d26"))
+        painter.fillRect(QRectF(target.left() - size, target.top() - size, size, size), QColor("#141a22"))
+        painter.setPen(QPen(QColor("#52606f"), 1))
+        painter.drawLine(top_rect.bottomLeft(), top_rect.bottomRight())
+        painter.drawLine(left_rect.topRight(), left_rect.bottomRight())
+
+        font_metrics = QFontMetrics(painter.font())
+        text_pen = QPen(QColor("#9da9b5"))
+        tick_pen = QPen(QColor("#657486"), 1)
+        painter.setPen(tick_pen)
+        for x in range(0, self.document.width + step, step):
+            widget_x = target.left() + x * self.zoom
+            if widget_x < top_rect.left() - 1 or widget_x > top_rect.right() + 1:
+                continue
+            is_major = x % major_step == 0
+            tick = size if is_major else size * 0.45
+            painter.drawLine(
+                QPointF(widget_x, top_rect.bottom()),
+                QPointF(widget_x, top_rect.bottom() - tick),
+            )
+            if is_major:
+                painter.setPen(text_pen)
+                text = str(x)
+                painter.drawText(
+                    QPointF(widget_x + 3, top_rect.top() + font_metrics.ascent() + 2),
+                    text,
+                )
+                painter.setPen(tick_pen)
+
+        for y in range(0, self.document.height + step, step):
+            widget_y = target.top() + y * self.zoom
+            if widget_y < left_rect.top() - 1 or widget_y > left_rect.bottom() + 1:
+                continue
+            is_major = y % major_step == 0
+            tick = size if is_major else size * 0.45
+            painter.drawLine(
+                QPointF(left_rect.right(), widget_y),
+                QPointF(left_rect.right() - tick, widget_y),
+            )
+            if is_major:
+                painter.setPen(text_pen)
+                text = str(y)
+                text_width = font_metrics.horizontalAdvance(text)
+                painter.drawText(
+                    QPointF(left_rect.right() - text_width - 2, widget_y - 3),
+                    text,
+                )
+                painter.setPen(tick_pen)
+        painter.restore()
+
     def _draw_shape_preview(self, painter: QPainter, start: QPoint, end: QPoint) -> None:
         color = QColor("#63a4ff") if self.tool == Tool.SELECT_RECT else self._paint_color()
         style = Qt.PenStyle.DashLine if self.tool == Tool.SELECT_RECT else Qt.PenStyle.SolidLine
-        painter.setPen(QPen(color, max(1, self.brush_size / self.zoom), style, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+        painter.setPen(
+            QPen(
+                color,
+                max(1, self.brush_size / self.zoom),
+                style,
+                Qt.PenCapStyle.RoundCap,
+                Qt.PenJoinStyle.RoundJoin,
+            )
+        )
         painter.setBrush(Qt.BrushStyle.NoBrush)
         if self.tool == Tool.LINE:
             painter.drawLine(start, end)
@@ -304,7 +444,8 @@ class Canvas(QWidget):
     def mousePressEvent(self, event) -> None:
         self.setFocus()
         if event.button() == Qt.MouseButton.MiddleButton or (
-            event.button() == Qt.MouseButton.LeftButton and event.modifiers() & Qt.KeyboardModifier.SpaceModifier
+            event.button() == Qt.MouseButton.LeftButton
+            and event.modifiers() & Qt.KeyboardModifier.SpaceModifier
         ):
             self._panning = True
             self._space_pan = event.button() == Qt.MouseButton.LeftButton
@@ -414,7 +555,11 @@ class Canvas(QWidget):
             if self.tool in {Tool.LINE, Tool.RECTANGLE, Tool.ELLIPSE}:
                 self._draw_shape(self._start_canvas_pos, self._last_canvas_pos)
             elif self.tool == Tool.SELECT_RECT:
-                rect = self._constrained_rect(self._start_canvas_pos, self._last_canvas_pos) if self._shift_pressed else self._normalized_rect(self._start_canvas_pos, self._last_canvas_pos)
+                rect = (
+                    self._constrained_rect(self._start_canvas_pos, self._last_canvas_pos)
+                    if self._shift_pressed
+                    else self._normalized_rect(self._start_canvas_pos, self._last_canvas_pos)
+                )
                 self.selection.set_rect(rect, self._selection_mode)
         self._finish_action(emit_changed=self.tool != Tool.SELECT_RECT)
 
@@ -454,7 +599,12 @@ class Canvas(QWidget):
             self.paste_from_clipboard()
         elif event.key() == Qt.Key.Key_Delete:
             self.delete_selection()
-        elif self.tool == Tool.SELECT_RECT and event.key() in {Qt.Key.Key_Left, Qt.Key.Key_Right, Qt.Key.Key_Up, Qt.Key.Key_Down}:
+        elif self.tool == Tool.SELECT_RECT and event.key() in {
+            Qt.Key.Key_Left,
+            Qt.Key.Key_Right,
+            Qt.Key.Key_Up,
+            Qt.Key.Key_Down,
+        }:
             delta = {
                 Qt.Key.Key_Left: (-1, 0),
                 Qt.Key.Key_Right: (1, 0),
