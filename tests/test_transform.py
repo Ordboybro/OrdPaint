@@ -89,3 +89,49 @@ def test_copy_keeps_source_metadata_independent():
 
     assert state.rect.left() == 0
     assert clone.source_rect == QRect(1, 2, 3, 4)
+
+
+def test_hit_test_prefers_resize_handles_then_move_area():
+    state = TransformState.from_image(image(20, 10), QPointF(10, 20))
+
+    assert state.hit_test(QPointF(10, 20), tolerance=1) == TransformHandle.NORTH_WEST
+    assert state.hit_test(QPointF(20, 25), tolerance=1) == TransformHandle.MOVE
+    assert state.hit_test(QPointF(0, 0), tolerance=1) is None
+
+
+def test_handle_positions_cover_all_transform_handles():
+    state = TransformState.from_image(image(20, 10), QPointF(10, 20))
+    handles = state.handle_positions()
+
+    assert handles[TransformHandle.NORTH] == QPointF(20, 20)
+    assert handles[TransformHandle.EAST] == QPointF(30, 25)
+    assert handles[TransformHandle.SOUTH_WEST] == QPointF(10, 30)
+    assert handles[TransformHandle.MOVE] == QPointF(20, 25)
+
+
+def test_rotate_clockwise_swaps_dimensions_and_preserves_centre():
+    source = image(4, 2)
+    state = TransformState.from_image(source, QPointF(10, 20))
+    centre = QPointF(state.rect.center())
+
+    state.rotate_90_clockwise()
+
+    assert state.image.width() == 2
+    assert state.image.height() == 4
+    assert state.rect.width() == 2
+    assert state.rect.height() == 4
+    assert state.rect.center() == centre
+
+
+def test_rotate_counterclockwise_swaps_pixel_orientation():
+    source = image(2, 3)
+    source.setPixelColor(0, 0, QColor("#ff0000"))
+    source.setPixelColor(1, 2, QColor("#0000ff"))
+    state = TransformState.from_image(source)
+
+    state.rotate_90_counterclockwise()
+
+    assert state.image.size().width() == 3
+    assert state.image.size().height() == 2
+    assert state.image.pixelColor(2, 0) == QColor("#ff0000")
+    assert state.image.pixelColor(0, 1) == QColor("#0000ff")
