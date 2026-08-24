@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction, QActionGroup, QColor, QKeySequence, QPixmap
+from PySide6.QtGui import QAction, QActionGroup, QColor, QIcon, QKeySequence, QPixmap
 from PySide6.QtWidgets import (
     QColorDialog,
     QDockWidget,
@@ -57,9 +57,7 @@ class MainWindow(QMainWindow):
 
     def _connect_canvas(self) -> None:
         self.canvas.action_started.connect(self._push_history)
-        self.canvas.zoom_changed.connect(
-            lambda value: self.zoom_label.setText(f"{value}%") if hasattr(self, "zoom_label") else None
-        )
+        self.canvas.zoom_changed.connect(self._update_zoom_labels)
         self.canvas.document_changed.connect(self._on_document_changed)
         self.canvas.cursor_position_changed.connect(
             lambda p: self.position_label.setText(f"X: {p.x()}  Y: {p.y()}")
@@ -67,6 +65,12 @@ class MainWindow(QMainWindow):
             else None
         )
         self.canvas.color_picked.connect(self._set_color_from_canvas)
+
+    def _update_zoom_labels(self, value: int) -> None:
+        if hasattr(self, "zoom_label"):
+            self.zoom_label.setText(f"{value}%")
+        if hasattr(self, "zoom_status_label"):
+            self.zoom_status_label.setText(f"{value}%")
 
     def _replace_document(self, document: Document) -> None:
         old = self.centralWidget()
@@ -410,7 +414,7 @@ class MainWindow(QMainWindow):
         self.layers_list.clear()
         for layer in reversed(self.document.layers):
             thumbnail = layer.pixmap.scaled(38, 38, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-            item = QListWidgetItem(thumbnail, layer.name)
+            item = QListWidgetItem(QIcon(thumbnail), layer.name)
             item.setCheckState(Qt.CheckState.Checked if layer.visible else Qt.CheckState.Unchecked)
             item.setToolTip("Заблокирован" if layer.locked else "Редактируемый слой")
             self.layers_list.addItem(item)
