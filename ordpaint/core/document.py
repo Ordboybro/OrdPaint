@@ -15,7 +15,12 @@ class Document:
     layers: list[Layer] = field(default_factory=list)
     active_index: int = 0
     revision: int = field(default=0, init=False, repr=False, compare=False)
-    _composite_cache: dict[tuple[int, int, int, int], QPixmap] = field(default_factory=dict, init=False, repr=False, compare=False)
+    _composite_cache: dict[tuple[int, int, int, int], QPixmap] = field(
+        default_factory=dict,
+        init=False,
+        repr=False,
+        compare=False,
+    )
 
     def __post_init__(self) -> None:
         if self.width < 1 or self.height < 1:
@@ -44,7 +49,7 @@ class Document:
     def add_layer(self, name: str | None = None, index: int | None = None) -> Layer:
         pixmap = QPixmap(self.width, self.height)
         pixmap.fill(Qt.GlobalColor.transparent)
-        layer = Layer(name or f"Layer {len(self.layers) + 1}", pixmap)
+        layer = Layer(self.unique_name(name or f"Layer {len(self.layers) + 1}"), pixmap)
         if index is None:
             index = len(self.layers)
         index = max(0, min(index, len(self.layers)))
@@ -74,11 +79,25 @@ class Document:
             raise IndexError("Layer index out of range")
         self.active_index = index
 
-    def rename_active_layer(self, name: str) -> None:
-        name = name.strip()
-        if name and name != self.active_layer.name:
-            self.active_layer.name = name
-            self.touch()
+    def rename_layer(self, index: int, name: str) -> bool:
+        name = name.strip()[:128]
+        if not name:
+            return False
+        layer = self.layers[index]
+        if name == layer.name:
+            return False
+        names = {item.name for position, item in enumerate(self.layers) if position != index}
+        base = name
+        number = 2
+        while name in names:
+            name = f"{base} {number}"
+            number += 1
+        layer.name = name
+        self.touch()
+        return True
+
+    def rename_active_layer(self, name: str) -> bool:
+        return self.rename_layer(self.active_index, name)
 
     def set_layer_visibility(self, index: int, visible: bool) -> None:
         visible = bool(visible)
@@ -92,6 +111,14 @@ class Document:
             self.layers[index].opacity = value
             self.touch()
 
+    def set_layer_blend_mode(self, index: int, blend_mode: Qt.CompositionMode) -> bool:
+        mode = Qt.CompositionMode(blend_mode)
+        if self.layers[index].blend_mode == mode:
+            return False
+        self.layers[index].blend_mode = mode
+        self.touch()
+        return True
+
     def set_layer_locked(self, index: int, locked: bool) -> None:
         locked = bool(locked)
         if self.layers[index].locked != locked:
@@ -102,7 +129,10 @@ class Document:
         target = self.active_index + offset
         if not 0 <= target < len(self.layers):
             return False
-        self.layers[self.active_index], self.layers[target] = self.layers[target], self.layers[self.active_index]
+        self.layers[self.active_index], self.layers[target] = (
+            self.layers[target],
+            self.layers[self.active_index],
+        )
         self.active_index = target
         self.touch()
         return True
@@ -112,6 +142,8 @@ class Document:
             return False
         lower = self.layers[self.active_index - 1]
         upper = self.active_layer
+        if lower.locked:
+            return False
         painter = QPainter(lower.pixmap)
         painter.setOpacity(max(0, min(100, upper.opacity)) / 100)
         painter.setCompositionMode(upper.blend_mode)
@@ -128,6 +160,8 @@ class Document:
             return False
         base_index = visible_indices[0]
         base = self.layers[base_index]
+        if base.locked:
+            return False
         result = QPixmap(self.width, self.height)
         result.fill(Qt.GlobalColor.transparent)
         painter = QPainter(result)
@@ -157,6 +191,7 @@ class Document:
         return True
 
     def unique_name(self, base: str) -> str:
+        base = base.strip()[:128] or "Layer"
         names = {layer.name for layer in self.layers}
         if base not in names:
             return base
