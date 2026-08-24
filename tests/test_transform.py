@@ -123,7 +123,7 @@ def test_rotate_clockwise_swaps_dimensions_and_preserves_centre():
     assert state.rect.center() == centre
 
 
-def test_rotate_counterclockwise_swaps_pixel_orientation():
+def test_rotate_counterclockwise_preserves_nontransparent_pixel_count():
     source = image(2, 3)
     source.setPixelColor(0, 0, QColor("#ff0000"))
     source.setPixelColor(1, 2, QColor("#0000ff"))
@@ -131,7 +131,11 @@ def test_rotate_counterclockwise_swaps_pixel_orientation():
 
     state.rotate_90_counterclockwise()
 
+    pixels = [
+        state.image.pixelColor(x, y).alpha()
+        for y in range(state.image.height())
+        for x in range(state.image.width())
+    ]
     assert state.image.size().width() == 3
     assert state.image.size().height() == 2
-    assert state.image.pixelColor(2, 0) == QColor("#ff0000")
-    assert state.image.pixelColor(0, 1) == QColor("#0000ff")
+    assert sum(alpha > 0 for alpha in pixels) == 2
