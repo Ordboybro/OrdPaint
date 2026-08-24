@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, Qt, Signal
+from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QGuiApplication, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QWidget
 
@@ -41,6 +41,14 @@ class Canvas(QWidget):
         self._last_pan_pos = QPointF()
         self._hover_canvas_pos: QPoint | None = None
         self._selection_mode = SelectionMode.REPLACE
+        self._moving_selection = False
+        self._selection_move_anchor: QPoint | None = None
+        self._selection_initial_rect: QRect | None = None
+        self._selection_dash_offset = 0.0
+        self._selection_timer = QTimer(self)
+        self._selection_timer.setInterval(90)
+        self._selection_timer.timeout.connect(self._advance_selection_animation)
+        self._selection_timer.start()
 
         self.setMouseTracking(True)
         self.setMinimumSize(500, 400)
@@ -279,9 +287,19 @@ class Canvas(QWidget):
             painter.drawEllipse(rect)
 
     def _draw_selection(self, painter: QPainter, rect: QRect) -> None:
-        painter.setPen(QPen(QColor("#63a4ff"), max(1, 1 / self.zoom), Qt.PenStyle.DashLine))
+        pen = QPen(QColor("#ffffff"), max(1, 1 / self.zoom))
+        pen.setStyle(Qt.PenStyle.CustomDashLine)
+        pen.setDashPattern([4, 4])
+        pen.setDashOffset(self._selection_dash_offset)
+        painter.setPen(pen)
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawRect(rect)
+
+    def _advance_selection_animation(self) -> None:
+        if not self.selection.active:
+            return
+        self._selection_dash_offset = (self._selection_dash_offset + 1) % 8
+        self.update()
 
     def mousePressEvent(self, event) -> None:
         self.setFocus()
@@ -305,16 +323,32 @@ class Canvas(QWidget):
             self.color_picked.emit(color)
             return
         if self.tool == Tool.SELECT_RECT:
+            modifiers = event.modifiers()
+            if self.selection.active and self.selection.contains(point) and not (
+                modifiers
+                & (
+                    Qt.KeyboardModifier.ShiftModifier
+                    | Qt.KeyboardModifier.AltModifier
+                    | Qt.KeyboardModifier.ControlModifier
+                )
+            ):
+                self._moving_selection = True
+                self._selection_move_anchor = QPoint(point)
+                self._selection_initial_rect = QRect(self.selection.rect)
+                self.setCursor(Qt.CursorShape.SizeAllCursor)
+                return
             self._drawing = True
             self._last_canvas_pos = point
             self._start_canvas_pos = point
-            modifiers = event.modifiers()
-            if modifiers & Qt.KeyboardModifier.ShiftModifier:
+            if (
+                modifiers & Qt.KeyboardModifier.ShiftModifier
+                and modifiers & Qt.KeyboardModifier.AltModifier
+            ):
+                self._selection_mode = SelectionMode.INTERSECT
+            elif modifiers & Qt.KeyboardModifier.ShiftModifier:
                 self._selection_mode = SelectionMode.ADD
             elif modifiers & Qt.KeyboardModifier.AltModifier:
                 self._selection_mode = SelectionMode.SUBTRACT
-            elif modifiers & Qt.KeyboardModifier.ControlModifier:
-                self._selection_mode = SelectionMode.INTERSECT
             else:
                 self._selection_mode = SelectionMode.REPLACE
             return
@@ -341,6 +375,15 @@ class Canvas(QWidget):
         self._hover_canvas_pos = point
         if point is not None:
             self.cursor_position_changed.emit(point)
+        if self._moving_selection:
+            if point is None or self._selection_move_anchor is None or self._selection_initial_rect is None:
+                return
+            moved = QRect(self._selection_initial_rect)
+            moved.translate(point - self._selection_move_anchor)
+            self.selection.rect = moved
+            self.selection.clamp(self.document.width, self.document.height)
+            self.update()
+            return
         if not self._drawing or point is None:
             self.update()
             return
@@ -357,6 +400,13 @@ class Canvas(QWidget):
                 self._panning = False
                 self._space_pan = False
                 self.unsetCursor()
+            return
+        if event.button() == Qt.MouseButton.LeftButton and self._moving_selection:
+            self._moving_selection = False
+            self._selection_move_anchor = None
+            self._selection_initial_rect = None
+            self.unsetCursor()
+            self.update()
             return
         if event.button() != Qt.MouseButton.LeftButton or not self._drawing:
             return
@@ -471,6 +521,9 @@ class Canvas(QWidget):
         self._drawing = False
         self._panning = False
         self._space_pan = False
+        self._moving_selection = False
+        self._selection_move_anchor = None
+        self._selection_initial_rect = None
         self._last_canvas_pos = None
         self._start_canvas_pos = None
         self.unsetCursor()
