@@ -6,8 +6,8 @@ def test_transaction_creates_one_undo_step(qt_app):
     document = Document(8, 8)
     history = History()
     assert history.begin_transaction(document)
-    document.active_layer.name = "A"
-    document.active_layer.name = "B"
+    document.rename_active_layer("A")
+    document.rename_active_layer("B")
     assert history.end_transaction(document)
     assert len(history) == 1
     restored = history.undo(document)
