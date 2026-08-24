@@ -1,5 +1,5 @@
 from PySide6.QtCore import QPoint, QPointF, QRect
-from PySide6.QtGui import QColor, QImage
+from PySide6.QtGui import QColor, QImage, QPixmap
 
 from ordpaint.core.document import Document
 from ordpaint.core.transform_controller import TransformController
@@ -19,11 +19,10 @@ def test_begin_from_selection_does_not_mutate_document():
 
 def test_commit_moves_selected_pixels_and_clears_source():
     document = Document(width=20, height=20)
-    document.active_layer.pixmap.fill(QColor("#00000000"))
-    image = document.active_layer.pixmap.toImage()
+    image = QImage(20, 20, QImage.Format.Format_ARGB32)
     image.fill(QColor("#00000000"))
     image.setPixelColor(1, 1, QColor("#ff0000"))
-    document.active_layer.pixmap = document.active_layer.pixmap.fromImage(image)
+    document.active_layer.pixmap = QPixmap.fromImage(image)
 
     controller = TransformController()
     assert controller.begin_from_selection(document, QRect(1, 1, 1, 1))
