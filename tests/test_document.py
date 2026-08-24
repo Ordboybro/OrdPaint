@@ -37,6 +37,25 @@ def test_layer_properties_are_clamped(qt_app):
     assert document.active_layer.locked is True
 
 
+def test_layer_rename_is_unique_and_touches_document(qt_app):
+    document = Document(32, 32)
+    document.add_layer("Layer")
+    before = document.revision
+    assert document.rename_layer(1, "Layer 1") is True
+    assert document.layers[1].name == "Layer 1 2"
+    assert document.revision == before + 1
+    assert document.rename_layer(1, "Layer 1 2") is False
+
+
+def test_blend_mode_change_touches_document(qt_app):
+    document = Document(32, 32)
+    before = document.revision
+    assert document.set_layer_blend_mode(0, Qt.CompositionMode.CompositionMode_Multiply) is True
+    assert document.active_layer.blend_mode == Qt.CompositionMode.CompositionMode_Multiply
+    assert document.revision == before + 1
+    assert document.set_layer_blend_mode(0, Qt.CompositionMode.CompositionMode_Multiply) is False
+
+
 def test_clear_locked_layer_is_rejected(qt_app):
     document = Document(16, 16)
     document.active_layer.pixmap.fill(Qt.GlobalColor.black)
@@ -51,9 +70,18 @@ def test_merge_visible_combines_visible_layers(qt_app):
     document.add_layer("Top")
     document.active_layer.pixmap.fill(Qt.GlobalColor.blue)
     document.add_layer("Hidden")
-    document.active_layer.visible = False
+    document.set_layer_visibility(document.active_index, False)
 
     assert document.merge_visible() is True
     assert len(document.layers) == 2
     assert document.layers[0].pixmap.toImage().pixelColor(0, 0).blue() > 0
     assert document.layers[1].name == "Hidden"
+
+
+def test_merge_rejects_locked_destination(qt_app):
+    document = Document(16, 16)
+    document.set_layer_locked(0, True)
+    document.add_layer("Top")
+    assert document.merge_active_down() is False
+    document.set_active_index(0)
+    assert document.merge_visible() is False
