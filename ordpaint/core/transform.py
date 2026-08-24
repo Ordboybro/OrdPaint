@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from PySide6.QtCore import QPointF, QRect, QRectF, QSize, Qt
-from PySide6.QtGui import QImage, QPainter
+from PySide6.QtGui import QImage, QPainter, QTransform
 
 
 class TransformHandle(StrEnum):
@@ -21,11 +21,11 @@ class TransformHandle(StrEnum):
 
 @dataclass
 class TransformState:
-    """UI-independent state for a floating raster transform.
+    """UI-independent state for one floating raster transform.
 
-    The image stays immutable from the document's perspective until the caller
-    explicitly commits it. This keeps move/resize/flip previews reversible and
-    makes the model straightforward to unit-test outside the Canvas widget.
+    The document is not mutated while this object is being edited. A UI can
+    freely move, resize, flip or rotate the state and commit exactly one final
+    operation to history.
     """
 
     image: QImage
@@ -71,6 +71,44 @@ class TransformState:
             self.source_layer_index,
             self.create_new_layer,
         )
+
+    def handle_positions(self) -> dict[TransformHandle, QPointF]:
+        """Return the eight resize handles plus the centre move handle."""
+        return {
+            TransformHandle.NORTH_WEST: self.rect.topLeft(),
+            TransformHandle.NORTH: QPointF(self.rect.center().x(), self.rect.top()),
+            TransformHandle.NORTH_EAST: self.rect.topRight(),
+            TransformHandle.EAST: QPointF(self.rect.right(), self.rect.center().y()),
+            TransformHandle.SOUTH_EAST: self.rect.bottomRight(),
+            TransformHandle.SOUTH: QPointF(self.rect.center().x(), self.rect.bottom()),
+            TransformHandle.SOUTH_WEST: self.rect.bottomLeft(),
+            TransformHandle.WEST: QPointF(self.rect.left(), self.rect.center().y()),
+            TransformHandle.MOVE: self.rect.center(),
+        }
+
+    def hit_test(self, point: QPointF, tolerance: float = 6.0) -> TransformHandle | None:
+        """Return the handle under *point* in document coordinates."""
+        if tolerance < 0:
+            raise ValueError("Transform hit tolerance must not be negative")
+        tolerance_squared = tolerance * tolerance
+        for handle in (
+            TransformHandle.NORTH_WEST,
+            TransformHandle.NORTH,
+            TransformHandle.NORTH_EAST,
+            TransformHandle.EAST,
+            TransformHandle.SOUTH_EAST,
+            TransformHandle.SOUTH,
+            TransformHandle.SOUTH_WEST,
+            TransformHandle.WEST,
+        ):
+            position = self.handle_positions()[handle]
+            dx = point.x() - position.x()
+            dy = point.y() - position.y()
+            if dx * dx + dy * dy <= tolerance_squared:
+                return handle
+        if self.rect.contains(point):
+            return TransformHandle.MOVE
+        return None
 
     def move(self, delta: QPointF, bounds: QRectF | None = None) -> None:
         moved = QRectF(self.rect)
@@ -120,6 +158,22 @@ class TransformState:
 
     def flip_vertical(self) -> None:
         self.image = self.image.mirrored(False, True)
+
+    def rotate_90_clockwise(self) -> None:
+        self._rotate_90(-90)
+
+    def rotate_90_counterclockwise(self) -> None:
+        self._rotate_90(90)
+
+    def _rotate_90(self, angle: int) -> None:
+        centre = self.rect.center()
+        self.image = self.image.transformed(QTransform().rotate(angle))
+        self.rect = QRectF(
+            centre.x() - self.rect.height() / 2,
+            centre.y() - self.rect.width() / 2,
+            self.rect.height(),
+            self.rect.width(),
+        )
 
     def render_on(self, image: QImage, *, clear_source: bool = False) -> QImage:
         """Return a copy of *image* with the transform raster composited onto it."""
