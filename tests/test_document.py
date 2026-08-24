@@ -1,5 +1,4 @@
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QGuiApplication
 
 from ordpaint.core.document import Document
 
@@ -61,7 +60,7 @@ def test_clear_locked_layer_is_rejected(qt_app):
     document.active_layer.pixmap.fill(Qt.GlobalColor.black)
     document.set_layer_locked(0, True)
     assert document.clear_active_layer() is False
-    assert not document.active_layer.pixmap.toImage().pixelColor(0, 0).alpha() == 0
+    assert document.active_layer.pixmap.toImage().pixelColor(0, 0).alpha() != 0
 
 
 def test_merge_visible_combines_visible_layers(qt_app):
