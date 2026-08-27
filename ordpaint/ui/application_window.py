@@ -37,7 +37,14 @@ class MainWindow(BaseMainWindow):
         QTimer.singleShot(0, self._offer_recovery)
 
     def _rewire_file_actions(self) -> None:
-        for action in (self.new_action, self.open_action, self.import_action, self.save_action, self.save_as_action):
+        actions = (
+            self.new_action,
+            self.open_action,
+            self.import_action,
+            self.save_action,
+            self.save_as_action,
+        )
+        for action in actions:
             action.triggered.disconnect()
         self.new_action.triggered.connect(self.new_document)
         self.open_action.triggered.connect(self.open_project)
@@ -102,26 +109,86 @@ class MainWindow(BaseMainWindow):
         self._refresh_layers()
 
     def _install_transform_actions(self) -> None:
-        self.begin_transform_action = QAction("Свободное трансформирование", self, shortcut="Ctrl+T")
-        self.begin_transform_action.triggered.connect(self.canvas.begin_transform)
-        self.commit_transform_action = QAction("Применить трансформацию", self, shortcut="Return")
-        self.commit_transform_action.triggered.connect(self.canvas.commit_transform)
-        self.cancel_transform_action = QAction("Отменить трансформацию", self, shortcut="Escape")
-        self.cancel_transform_action.triggered.connect(self.canvas.cancel_transform)
-        self.flip_horizontal_action = QAction("Отразить по горизонтали", self, triggered=self.canvas.flip_transform_horizontal)
-        self.flip_vertical_action = QAction("Отразить по вертикали", self, triggered=self.canvas.flip_transform_vertical)
-        self.rotate_clockwise_action = QAction("Повернуть на 90° вправо", self, triggered=self.canvas.rotate_transform_clockwise)
-        self.rotate_counterclockwise_action = QAction("Повернуть на 90° влево", self, triggered=self.canvas.rotate_transform_counterclockwise)
+        self.begin_transform_action = QAction(
+            "Свободное трансформирование", self, shortcut="Ctrl+T"
+        )
+        self.begin_transform_action.triggered.connect(self._begin_transform)
+        self.commit_transform_action = QAction(
+            "Применить трансформацию", self, shortcut="Return"
+        )
+        self.commit_transform_action.triggered.connect(self._commit_transform)
+        self.cancel_transform_action = QAction(
+            "Отменить трансформацию", self, shortcut="Escape"
+        )
+        self.cancel_transform_action.triggered.connect(self._cancel_transform)
+        self.flip_horizontal_action = QAction("Отразить по горизонтали", self)
+        self.flip_horizontal_action.triggered.connect(self._flip_transform_horizontal)
+        self.flip_vertical_action = QAction("Отразить по вертикали", self)
+        self.flip_vertical_action.triggered.connect(self._flip_transform_vertical)
+        self.rotate_clockwise_action = QAction("Повернуть на 90° вправо", self)
+        self.rotate_clockwise_action.triggered.connect(self._rotate_transform_clockwise)
+        self.rotate_counterclockwise_action = QAction("Повернуть на 90° влево", self)
+        self.rotate_counterclockwise_action.triggered.connect(
+            self._rotate_transform_counterclockwise
+        )
         menu = self.menuBar().addMenu("Трансформация")
-        menu.addActions([self.begin_transform_action, self.commit_transform_action, self.cancel_transform_action])
+        menu.addActions(
+            [
+                self.begin_transform_action,
+                self.commit_transform_action,
+                self.cancel_transform_action,
+            ]
+        )
         menu.addSeparator()
-        menu.addActions([self.flip_horizontal_action, self.flip_vertical_action, self.rotate_clockwise_action, self.rotate_counterclockwise_action])
+        menu.addActions(
+            [
+                self.flip_horizontal_action,
+                self.flip_vertical_action,
+                self.rotate_clockwise_action,
+                self.rotate_counterclockwise_action,
+            ]
+        )
         self.canvas.transform_active_changed.connect(self._update_transform_actions)
         self._update_transform_actions(self.canvas.transform_active)
 
+    def _replace_document(self, document) -> None:
+        super()._replace_document(document)
+        if hasattr(self, "begin_transform_action"):
+            self.canvas.transform_active_changed.connect(self._update_transform_actions)
+            self._update_transform_actions(self.canvas.transform_active)
+
+    def _begin_transform(self) -> None:
+        self.canvas.begin_transform()
+
+    def _commit_transform(self) -> None:
+        self.canvas.commit_transform()
+
+    def _cancel_transform(self) -> None:
+        self.canvas.cancel_transform()
+
+    def _flip_transform_horizontal(self) -> None:
+        self.canvas.flip_transform_horizontal()
+
+    def _flip_transform_vertical(self) -> None:
+        self.canvas.flip_transform_vertical()
+
+    def _rotate_transform_clockwise(self) -> None:
+        self.canvas.rotate_transform_clockwise()
+
+    def _rotate_transform_counterclockwise(self) -> None:
+        self.canvas.rotate_transform_counterclockwise()
+
     def _update_transform_actions(self, active: bool) -> None:
         self.begin_transform_action.setEnabled(not active)
-        for action in (self.commit_transform_action, self.cancel_transform_action, self.flip_horizontal_action, self.flip_vertical_action, self.rotate_clockwise_action, self.rotate_counterclockwise_action):
+        actions = (
+            self.commit_transform_action,
+            self.cancel_transform_action,
+            self.flip_horizontal_action,
+            self.flip_vertical_action,
+            self.rotate_clockwise_action,
+            self.rotate_counterclockwise_action,
+        )
+        for action in actions:
             action.setEnabled(active)
 
     def _install_recent_menu(self) -> None:
@@ -139,7 +206,9 @@ class MainWindow(BaseMainWindow):
             return
         for path in paths:
             action = self.recent_menu.addAction(str(path))
-            action.triggered.connect(lambda checked=False, value=str(path): self.open_recent_project(value))
+            action.triggered.connect(
+                lambda checked=False, value=str(path): self.open_recent_project(value)
+            )
         self.recent_menu.addSeparator()
         self.recent_menu.addAction("Очистить список", self._clear_recent_projects)
 
@@ -155,6 +224,7 @@ class MainWindow(BaseMainWindow):
         if not self._confirm_discard():
             return
         from ordpaint.core.project import ProjectError, load_project
+
         try:
             document = load_project(path)
         except ProjectError as exc:
@@ -190,7 +260,18 @@ class MainWindow(BaseMainWindow):
         self._update_zoom_labels(round(self.canvas.zoom * 100))
 
     def _build_ui_state(self) -> UIState:
-        return UIState(geometry=bytes(self.saveGeometry()), window_state=bytes(self.saveState()), zoom=self.canvas.zoom, show_grid=self.canvas.show_grid, show_rulers=self.canvas.show_rulers, grid_size=self.canvas.grid_size, brush_size=self.canvas.brush_size, opacity=self.canvas.opacity, color=self.canvas.color.name(), recent_paths=self.session.serialize_recent())
+        return UIState(
+            geometry=bytes(self.saveGeometry()),
+            window_state=bytes(self.saveState()),
+            zoom=self.canvas.zoom,
+            show_grid=self.canvas.show_grid,
+            show_rulers=self.canvas.show_rulers,
+            grid_size=self.canvas.grid_size,
+            brush_size=self.canvas.brush_size,
+            opacity=self.canvas.opacity,
+            color=self.canvas.color.name(),
+            recent_paths=self.session.serialize_recent(),
+        )
 
     def _save_ui_state(self) -> None:
         self.settings_store.save(self._build_ui_state())
@@ -208,7 +289,13 @@ class MainWindow(BaseMainWindow):
         recovered = self.session.recover_or_none()
         if recovered is None:
             return
-        result = QMessageBox.question(self, "Восстановление проекта", "Найден черновик после предыдущего завершения. Восстановить его?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.Yes)
+        result = QMessageBox.question(
+            self,
+            "Восстановление проекта",
+            "Найден черновик после предыдущего завершения. Восстановить его?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
         if result == QMessageBox.StandardButton.Yes:
             self.history.clear()
             self.current_path = None
