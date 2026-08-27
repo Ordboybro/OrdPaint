@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import OrderedDict
 from dataclasses import dataclass, field
 
 from PySide6.QtCore import Qt
@@ -15,12 +16,13 @@ class Document:
     layers: list[Layer] = field(default_factory=list)
     active_index: int = 0
     revision: int = field(default=0, init=False, repr=False, compare=False)
-    _composite_cache: dict[tuple[int, int, int, int], QPixmap] = field(
-        default_factory=dict,
+    _composite_cache: OrderedDict[tuple[int, int, int, int], QPixmap] = field(
+        default_factory=OrderedDict,
         init=False,
         repr=False,
         compare=False,
     )
+    _COMPOSITE_CACHE_LIMIT = 8
 
     def __post_init__(self) -> None:
         if self.width < 1 or self.height < 1:
@@ -205,6 +207,7 @@ class Document:
         key = (color.red(), color.green(), color.blue(), color.alpha())
         cached = self._composite_cache.get(key)
         if cached is not None:
+            self._composite_cache.move_to_end(key)
             return cached.copy()
         result = QPixmap(self.width, self.height)
         result.fill(color)
@@ -217,4 +220,7 @@ class Document:
             painter.drawPixmap(0, 0, layer.pixmap)
         painter.end()
         self._composite_cache[key] = result
+        self._composite_cache.move_to_end(key)
+        while len(self._composite_cache) > self._COMPOSITE_CACHE_LIMIT:
+            self._composite_cache.popitem(last=False)
         return result.copy()
