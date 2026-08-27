@@ -1,3 +1,19 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ordpaint"
+version = "0.1.0"
+description = "Desktop raster graphics editor built with Python and PySide6"
+requires-python = ">=3.12"
+readme = "README.md"
+license = { file = "LICENSE" }
+dependencies = ["PySide6>=6.7,<7"]
+
+[tool.setuptools.packages.find]
+include = ["ordpaint*"]
+
 [tool.ruff]
 line-length = 120
 target-version = "py312"
