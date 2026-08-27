@@ -128,13 +128,20 @@ class Document:
             self.touch()
 
     def move_active_layer(self, offset: int) -> bool:
-        target = self.active_index + offset
-        if not 0 <= target < len(self.layers):
+        return self.move_layer(self.active_index, self.active_index + offset)
+
+    def move_layer(self, source: int, target: int) -> bool:
+        """Move one layer to an exact stack index and keep it active.
+
+        This is used by drag-and-drop in the UI while keeping ordering logic in
+        the document model instead of mutating ``layers`` directly from Qt.
+        """
+        if not 0 <= source < len(self.layers) or not 0 <= target < len(self.layers):
             return False
-        self.layers[self.active_index], self.layers[target] = (
-            self.layers[target],
-            self.layers[self.active_index],
-        )
+        if source == target:
+            return False
+        layer = self.layers.pop(source)
+        self.layers.insert(target, layer)
         self.active_index = target
         self.touch()
         return True
