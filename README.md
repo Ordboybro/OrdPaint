@@ -1,71 +1,94 @@
 # OrdPaint
 
-**OrdPaint** — настольный растровый графический редактор на Python 3 и PySide6/Qt 6.
+**OrdPaint** — desktop raster graphics editor built with Python 3 and PySide6 / Qt 6.
 
-Проект строится как полноценное desktop-приложение: отдельное core-ядро, Qt-интерфейс, многослойный документ, собственный формат проектов, Undo/Redo, растровые инструменты и автоматические проверки качества.
+The project is designed as a real portfolio-grade application rather than a single-file Paint clone: document state is isolated in `core`, Qt is kept in `ui`, editing operations are undoable, and quality is checked automatically with Ruff and pytest.
 
-## Возможности
+## Features
 
-### Рисование
-- кисть и ластик;
-- линия, прямоугольник и эллипс;
-- заливка с tolerance;
-- пипетка;
-- размер и непрозрачность инструмента;
-- прозрачный холст с checkerboard-фоном;
-- zoom и pan.
+### Canvas & drawing
+- brush and eraser;
+- line, rectangle and ellipse tools;
+- flood fill with tolerance;
+- eyedropper;
+- configurable brush size and opacity;
+- transparent checkerboard canvas;
+- zoom and pan;
+- optional rulers and grid;
+- cursor position feedback;
+- smooth previews for shape drawing and transform operations.
 
-### Слои
-- создание и удаление;
-- дублирование;
-- изменение порядка;
-- переименование;
-- visibility и lock;
-- opacity;
-- blend modes;
-- merge down и merge visible.
-
-### Выделение и буфер
-- прямоугольное выделение;
-- replace/add/subtract/intersect;
+### Selection & transform
+- rectangular selection;
+- replace / add / subtract / intersect modes;
 - Select All / Deselect;
-- copy/cut/paste;
-- вставка содержимого отдельным слоем;
-- ограничение растровых операций областью выделения.
+- animated marching-ants selection border;
+- copy / cut / paste through the system clipboard;
+- floating paste preview;
+- floating transform workflow;
+- move and resize with handles;
+- aspect-ratio constrained resize;
+- flip horizontal / vertical;
+- rotate 90° left / right;
+- Enter to commit and Escape to cancel.
 
-### Проекты
-- собственный формат `.ordpaint`;
+### Layers
+- create, duplicate and delete;
+- rename with unique names;
+- drag & drop reordering;
+- visibility and locking;
+- opacity with history transaction support;
+- blend modes;
+- merge down and merge visible;
+- generated thumbnails;
+- layer context menu.
+
+### Projects & reliability
+- native `.ordpaint` project format;
 - versioned project schema;
-- безопасное атомарное сохранение;
-- проверка структуры и размеров при загрузке;
-- импорт PNG/JPEG/WebP/BMP;
-- экспорт PNG/JPEG/WebP/BMP;
-- dirty-state и Undo/Redo.
+- atomic project saving;
+- import PNG / JPEG / WebP / BMP;
+- export PNG / JPEG / WebP / BMP;
+- dirty-state tracking;
+- Undo / Redo;
+- recent projects;
+- persistent Qt UI settings;
+- autosave;
+- crash-recovery draft support;
+- safe handling of invalid recovery data.
 
-## Архитектура
+## Architecture
 
 ```text
 ordpaint/
 ├── core/
-│   ├── document.py    # документ, слои и композиция
-│   ├── layer.py       # модель слоя
-│   ├── history.py     # Undo/Redo и транзакции
-│   ├── raster.py      # растровые операции
-│   ├── selection.py   # модель выделения
-│   ├── clipboard.py   # данные буфера обмена
-│   ├── project.py     # .ordpaint и импорт/экспорт
-│   ├── settings.py    # настройки приложения
-│   └── tools.py       # единая модель инструментов
+│   ├── document.py
+│   ├── layer.py
+│   ├── history.py
+│   ├── raster.py
+│   ├── selection.py
+│   ├── clipboard.py
+│   ├── transform.py
+│   ├── transform_controller.py
+│   ├── project.py
+│   ├── autosave.py
+│   ├── recent.py
+│   ├── session.py
+│   ├── ui_state.py
+│   └── tools.py
 └── ui/
-    ├── canvas.py      # viewport, input и rendering
-    └── main_window.py # меню, docks и application UI
+    ├── canvas.py
+    ├── layer_list.py
+    ├── settings_store.py
+    ├── application_window.py
+    └── main_window.py
 ```
 
-Главный принцип — не смешивать Qt-взаимодействие с растровой бизнес-логикой. `core` отвечает за состояние и операции документа, `ui` — за взаимодействие пользователя и визуализацию.
+The main architectural rule is simple: **core owns document state and editing operations; UI owns Qt interaction and presentation**. History snapshots are created before mutations, while high-frequency UI changes such as sliders use transactions so one user gesture becomes one undo step.
 
-## Установка
+## Installation
 
-Требуется Python 3.12+.
+Requires Python 3.12+.
 
 ```bash
 python -m venv .venv
@@ -80,7 +103,7 @@ pip install -r requirements.txt
 python main.py
 ```
 
-## Проверка качества
+## Quality checks
 
 ```bash
 ruff check .
@@ -88,36 +111,46 @@ ruff format --check .
 pytest -q
 ```
 
-CI выполняет эти проверки автоматически на push и pull request.
+CI runs all three checks on every push and pull request. Qt tests use the `offscreen` platform in CI.
 
-## Горячие клавиши
+## Hotkeys
 
-| Клавиша | Действие |
+| Key | Action |
 |---|---|
-| `B` | Кисть |
-| `E` | Ластик |
-| `L` | Линия |
-| `R` | Прямоугольник |
-| `O` | Эллипс |
-| `G` | Заливка |
-| `I` | Пипетка |
-| `M` | Выделение |
+| `B` | Brush |
+| `E` | Eraser |
+| `L` | Line |
+| `R` | Rectangle |
+| `O` | Ellipse |
+| `G` | Fill |
+| `I` | Eyedropper |
+| `M` | Selection |
+| `Ctrl+T` | Free Transform |
+| `Enter` | Commit Transform |
+| `Esc` | Cancel Transform |
 | `Ctrl+Z` | Undo |
 | `Ctrl+Y` | Redo |
 | `Ctrl+C` | Copy |
 | `Ctrl+X` | Cut |
 | `Ctrl+V` | Paste |
+| `Delete` | Delete selection |
 | `Ctrl+S` | Save |
 | `Ctrl+O` | Open |
 | `Ctrl+N` | New |
-| `Ctrl+колесо` | Zoom |
-| `Space + ЛКМ` | Pan |
-| `Средняя кнопка` | Pan |
+| `Ctrl+0` | 100% zoom |
+| `Ctrl+Shift+0` | Fit to window |
+| `Ctrl+mouse wheel` | Zoom |
+| `Space + LMB` | Pan |
+| `Middle mouse` | Pan |
 
-## Статус
+## Design direction
 
-OrdPaint находится в активной разработке. Core уже покрывает базовую архитектуру редактора; дальнейшая работа сосредоточена на полноценном selection/transform workflow, polished UI/UX, производительности больших документов, расширении тестов и финальной стабилизации.
+OrdPaint uses a dark, compact editor layout with warm orange accents, a dedicated left tool palette, a central canvas, and right-side layers / color panels. The UI is intentionally dense enough for a graphics editor while keeping the canvas dominant.
 
-## Лицензия
+## Status
 
-MIT — см. `LICENSE`.
+OrdPaint is in the final stabilization and polish stage. The core editor workflow is implemented; remaining work should focus on real-world runtime testing, visual refinement, performance profiling on large documents, broader regression coverage, packaging, and release documentation.
+
+## License
+
+MIT — see `LICENSE`.
