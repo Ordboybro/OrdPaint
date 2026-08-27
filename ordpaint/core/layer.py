@@ -12,7 +12,7 @@ class Layer:
     pixmap: QPixmap
     visible: bool = True
     opacity: int = 100
-    blend_mode: Qt.CompositionMode = Qt.CompositionMode_SourceOver
+    blend_mode: Qt.CompositionMode = Qt.CompositionMode.CompositionMode_SourceOver
     locked: bool = False
 
     def __post_init__(self) -> None:
