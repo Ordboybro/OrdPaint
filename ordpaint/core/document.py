@@ -16,12 +16,7 @@ class Document:
     layers: list[Layer] = field(default_factory=list)
     active_index: int = 0
     revision: int = field(default=0, init=False, repr=False, compare=False)
-    _composite_cache: OrderedDict[tuple[int, int, int, int], QPixmap] = field(
-        default_factory=OrderedDict,
-        init=False,
-        repr=False,
-        compare=False,
-    )
+    _composite_cache: OrderedDict[tuple[int, int, int, int], QPixmap] = field(default_factory=OrderedDict, init=False, repr=False, compare=False)
     _COMPOSITE_CACHE_LIMIT = 8
 
     def __post_init__(self) -> None:
@@ -36,17 +31,11 @@ class Document:
         return self.layers[self.active_index]
 
     def touch(self) -> None:
-        """Mark pixel/document data as changed and invalidate rendered caches."""
         self.revision += 1
         self._composite_cache.clear()
 
     def copy(self) -> "Document":
-        return Document(
-            width=self.width,
-            height=self.height,
-            layers=[layer.copy() for layer in self.layers],
-            active_index=self.active_index,
-        )
+        return Document(width=self.width, height=self.height, layers=[layer.copy() for layer in self.layers], active_index=self.active_index)
 
     def add_layer(self, name: str | None = None, index: int | None = None) -> Layer:
         pixmap = QPixmap(self.width, self.height)
@@ -113,8 +102,8 @@ class Document:
             self.layers[index].opacity = value
             self.touch()
 
-    def set_layer_blend_mode(self, index: int, blend_mode: Qt.CompositionMode) -> bool:
-        mode = Qt.CompositionMode(blend_mode)
+    def set_layer_blend_mode(self, index: int, blend_mode: QPainter.CompositionMode) -> bool:
+        mode = QPainter.CompositionMode(blend_mode)
         if self.layers[index].blend_mode == mode:
             return False
         self.layers[index].blend_mode = mode
@@ -131,14 +120,7 @@ class Document:
         return self.move_layer(self.active_index, self.active_index + offset)
 
     def move_layer(self, source: int, target: int) -> bool:
-        """Move one layer to an exact stack index and keep it active.
-
-        This is used by drag-and-drop in the UI while keeping ordering logic in
-        the document model instead of mutating ``layers`` directly from Qt.
-        """
-        if not 0 <= source < len(self.layers) or not 0 <= target < len(self.layers):
-            return False
-        if source == target:
+        if not 0 <= source < len(self.layers) or not 0 <= target < len(self.layers) or source == target:
             return False
         layer = self.layers.pop(source)
         self.layers.insert(target, layer)
@@ -182,7 +164,7 @@ class Document:
         painter.end()
         base.pixmap = result
         base.opacity = 100
-        base.blend_mode = Qt.CompositionMode.CompositionMode_SourceOver
+        base.blend_mode = QPainter.CompositionMode.CompositionMode_SourceOver
         for index in reversed(visible_indices[1:]):
             self.layers.pop(index)
             if index < self.active_index:
