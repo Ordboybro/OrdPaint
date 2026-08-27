@@ -9,12 +9,7 @@ from .project import ProjectError, load_project, save_project
 
 @dataclass
 class AutosaveManager:
-    """Small crash-recovery layer around the native project serializer.
-
-    Autosave is intentionally revision-based: repeated timer ticks do not write
-    the document again until its revision changed. The manager is UI-agnostic so
-    a Qt timer can call :meth:`autosave` without knowing project internals.
-    """
+    """Revision-based crash-recovery layer around the native project serializer."""
 
     path: Path
     last_revision: int | None = None
@@ -37,13 +32,16 @@ class AutosaveManager:
             return False
         try:
             save_project(document, self.path)
-        except ProjectError:
+        except (OSError, ProjectError):
             return False
         self.last_revision = document.revision
         return True
 
     def has_recovery(self) -> bool:
-        return self.path.exists() and self.path.is_file() and self.path.stat().st_size > 0
+        try:
+            return self.path.is_file() and self.path.stat().st_size > 0
+        except OSError:
+            return False
 
     def recover(self) -> Document:
         if not self.has_recovery():
