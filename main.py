@@ -2,7 +2,7 @@ import sys
 
 from PySide6.QtWidgets import QApplication
 
-from ordpaint.ui.main_window import MainWindow
+from ordpaint.ui.application_window import MainWindow
 
 
 APP_STYLE = """
