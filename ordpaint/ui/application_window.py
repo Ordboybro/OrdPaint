@@ -3,10 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QTimer, Qt
-from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtGui import QAction, QColor
 from PySide6.QtWidgets import QAbstractItemView, QMenu, QMessageBox
 
-from ordpaint.core.document import Document
 from ordpaint.core.session import SessionManager
 from ordpaint.core.ui_state import UIState
 from ordpaint.ui.layer_list import LayerListWidget
@@ -15,12 +14,7 @@ from ordpaint.ui.settings_store import SettingsStore
 
 
 class MainWindow(BaseMainWindow):
-    """Production integration layer for persistent UI and session workflows.
-
-    The base window owns editor controls; this subclass wires the already-tested
-    core services into the actual Qt application without moving persistence or
-    recovery logic into widgets.
-    """
+    """Integrates persistent UI state and session services into the Qt editor."""
 
     AUTOSAVE_INTERVAL_MS = 30_000
 
@@ -30,14 +24,12 @@ class MainWindow(BaseMainWindow):
         self.ui_state = self.settings_store.load()
         self.session = SessionManager()
         self.session.restore_recent(self.ui_state.recent_paths)
-
         self._install_layer_list()
         self._install_context_menu()
         self._install_transform_actions()
         self._install_recent_menu()
         self._rewire_file_actions()
         self._apply_ui_state(self.ui_state)
-
         self.autosave_timer = QTimer(self)
         self.autosave_timer.setInterval(self.AUTOSAVE_INTERVAL_MS)
         self.autosave_timer.timeout.connect(self._autosave_tick)
@@ -45,11 +37,8 @@ class MainWindow(BaseMainWindow):
         QTimer.singleShot(0, self._offer_recovery)
 
     def _rewire_file_actions(self) -> None:
-        self.new_action.triggered.disconnect()
-        self.open_action.triggered.disconnect()
-        self.import_action.triggered.disconnect()
-        self.save_action.triggered.disconnect()
-        self.save_as_action.triggered.disconnect()
+        for action in (self.new_action, self.open_action, self.import_action, self.save_action, self.save_as_action):
+            action.triggered.disconnect()
         self.new_action.triggered.connect(self.new_document)
         self.open_action.triggered.connect(self.open_project)
         self.import_action.triggered.connect(self.open_image)
@@ -119,45 +108,20 @@ class MainWindow(BaseMainWindow):
         self.commit_transform_action.triggered.connect(self.canvas.commit_transform)
         self.cancel_transform_action = QAction("Отменить трансформацию", self, shortcut="Escape")
         self.cancel_transform_action.triggered.connect(self.canvas.cancel_transform)
-        self.flip_horizontal_action = QAction("Отразить по горизонтали", self)
-        self.flip_horizontal_action.triggered.connect(self.canvas.flip_transform_horizontal)
-        self.flip_vertical_action = QAction("Отразить по вертикали", self)
-        self.flip_vertical_action.triggered.connect(self.canvas.flip_transform_vertical)
-        self.rotate_clockwise_action = QAction("Повернуть на 90° вправо", self)
-        self.rotate_clockwise_action.triggered.connect(self.canvas.rotate_transform_clockwise)
-        self.rotate_counterclockwise_action = QAction("Повернуть на 90° влево", self)
-        self.rotate_counterclockwise_action.triggered.connect(self.canvas.rotate_transform_counterclockwise)
-
-        transform_menu = self.menuBar().addMenu("Трансформация")
-        transform_menu.addActions(
-            [
-                self.begin_transform_action,
-                self.commit_transform_action,
-                self.cancel_transform_action,
-            ]
-        )
-        transform_menu.addSeparator()
-        transform_menu.addActions(
-            [
-                self.flip_horizontal_action,
-                self.flip_vertical_action,
-                self.rotate_clockwise_action,
-                self.rotate_counterclockwise_action,
-            ]
-        )
+        self.flip_horizontal_action = QAction("Отразить по горизонтали", self, triggered=self.canvas.flip_transform_horizontal)
+        self.flip_vertical_action = QAction("Отразить по вертикали", self, triggered=self.canvas.flip_transform_vertical)
+        self.rotate_clockwise_action = QAction("Повернуть на 90° вправо", self, triggered=self.canvas.rotate_transform_clockwise)
+        self.rotate_counterclockwise_action = QAction("Повернуть на 90° влево", self, triggered=self.canvas.rotate_transform_counterclockwise)
+        menu = self.menuBar().addMenu("Трансформация")
+        menu.addActions([self.begin_transform_action, self.commit_transform_action, self.cancel_transform_action])
+        menu.addSeparator()
+        menu.addActions([self.flip_horizontal_action, self.flip_vertical_action, self.rotate_clockwise_action, self.rotate_counterclockwise_action])
         self.canvas.transform_active_changed.connect(self._update_transform_actions)
         self._update_transform_actions(self.canvas.transform_active)
 
     def _update_transform_actions(self, active: bool) -> None:
         self.begin_transform_action.setEnabled(not active)
-        for action in (
-            self.commit_transform_action,
-            self.cancel_transform_action,
-            self.flip_horizontal_action,
-            self.flip_vertical_action,
-            self.rotate_clockwise_action,
-            self.rotate_counterclockwise_action,
-        ):
+        for action in (self.commit_transform_action, self.cancel_transform_action, self.flip_horizontal_action, self.flip_vertical_action, self.rotate_clockwise_action, self.rotate_counterclockwise_action):
             action.setEnabled(active)
 
     def _install_recent_menu(self) -> None:
@@ -175,7 +139,6 @@ class MainWindow(BaseMainWindow):
             return
         for path in paths:
             action = self.recent_menu.addAction(str(path))
-            action.setData(str(path))
             action.triggered.connect(lambda checked=False, value=str(path): self.open_recent_project(value))
         self.recent_menu.addSeparator()
         self.recent_menu.addAction("Очистить список", self._clear_recent_projects)
@@ -192,7 +155,6 @@ class MainWindow(BaseMainWindow):
         if not self._confirm_discard():
             return
         from ordpaint.core.project import ProjectError, load_project
-
         try:
             document = load_project(path)
         except ProjectError as exc:
@@ -218,7 +180,7 @@ class MainWindow(BaseMainWindow):
         self.canvas.set_grid_size(state.grid_size)
         self.canvas.set_brush_size(state.brush_size)
         self.canvas.set_opacity(state.opacity)
-        self._set_color_from_canvas(self.canvas.color.fromString(state.color))
+        self._set_color_from_canvas(QColor(state.color))
         self.grid_action.setChecked(self.canvas.show_grid)
         self.rulers_action.setChecked(self.canvas.show_rulers)
         self.size_spin.setValue(self.canvas.brush_size)
@@ -228,18 +190,7 @@ class MainWindow(BaseMainWindow):
         self._update_zoom_labels(round(self.canvas.zoom * 100))
 
     def _build_ui_state(self) -> UIState:
-        return UIState(
-            geometry=bytes(self.saveGeometry()),
-            window_state=bytes(self.saveState()),
-            zoom=self.canvas.zoom,
-            show_grid=self.canvas.show_grid,
-            show_rulers=self.canvas.show_rulers,
-            grid_size=self.canvas.grid_size,
-            brush_size=self.canvas.brush_size,
-            opacity=self.canvas.opacity,
-            color=self.canvas.color.name(),
-            recent_paths=self.session.serialize_recent(),
-        )
+        return UIState(geometry=bytes(self.saveGeometry()), window_state=bytes(self.saveState()), zoom=self.canvas.zoom, show_grid=self.canvas.show_grid, show_rulers=self.canvas.show_rulers, grid_size=self.canvas.grid_size, brush_size=self.canvas.brush_size, opacity=self.canvas.opacity, color=self.canvas.color.name(), recent_paths=self.session.serialize_recent())
 
     def _save_ui_state(self) -> None:
         self.settings_store.save(self._build_ui_state())
@@ -257,13 +208,7 @@ class MainWindow(BaseMainWindow):
         recovered = self.session.recover_or_none()
         if recovered is None:
             return
-        result = QMessageBox.question(
-            self,
-            "Восстановление проекта",
-            "Найден черновик после предыдущего завершения. Восстановить его?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.Yes,
-        )
+        result = QMessageBox.question(self, "Восстановление проекта", "Найден черновик после предыдущего завершения. Восстановить его?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.Yes)
         if result == QMessageBox.StandardButton.Yes:
             self.history.clear()
             self.current_path = None
@@ -304,8 +249,6 @@ class MainWindow(BaseMainWindow):
             event.ignore()
             return
         try:
-            if self.dirty:
-                self.session.tick_autosave(self.document)
             self._save_ui_state()
         except OSError:
             pass
