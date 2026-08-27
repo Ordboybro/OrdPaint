@@ -15,6 +15,8 @@ PROJECT_VERSION = 1
 PROJECT_FORMAT = "ordpaint"
 MAX_PROJECT_PIXELS = 100_000_000
 MAX_LAYERS = 512
+MAX_PROJECT_BYTES = 512 * 1024 * 1024
+MAX_LAYER_NAME_LENGTH = 128
 
 
 class ProjectError(RuntimeError):
@@ -73,6 +75,8 @@ def save_project(document: Document, path: str | Path) -> None:
         ],
     }
     data = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    if len(data.encode("utf-8")) > MAX_PROJECT_BYTES:
+        raise ProjectError("Project file is too large to save safely")
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary_path: str | None = None
     try:
@@ -101,9 +105,14 @@ def save_project(document: Document, path: str | Path) -> None:
 
 
 def load_project(path: str | Path) -> Document:
+    source = Path(path).expanduser()
     try:
-        payload = json.loads(Path(path).expanduser().read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        if source.stat().st_size > MAX_PROJECT_BYTES:
+            raise ProjectError("Project file is too large to load safely")
+        payload = json.loads(source.read_text(encoding="utf-8"))
+    except ProjectError:
+        raise
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise ProjectError("Could not read project") from exc
 
     if not isinstance(payload, dict):
@@ -139,7 +148,7 @@ def load_project(path: str | Path) -> Document:
             opacity = int(item.get("opacity", 100))
         except (TypeError, ValueError) as exc:
             raise ProjectError("Invalid layer opacity") from exc
-        name = str(item.get("name") or "Layer").strip()[:128] or "Layer"
+        name = str(item.get("name") or "Layer").strip()[:MAX_LAYER_NAME_LENGTH] or "Layer"
         layers.append(
             Layer(
                 name=name,
