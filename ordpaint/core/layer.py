@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QPainter, QPixmap
 
 
 @dataclass
@@ -12,7 +11,7 @@ class Layer:
     pixmap: QPixmap
     visible: bool = True
     opacity: int = 100
-    blend_mode: Qt.CompositionMode = Qt.CompositionMode.CompositionMode_SourceOver
+    blend_mode: QPainter.CompositionMode = QPainter.CompositionMode.CompositionMode_SourceOver
     locked: bool = False
 
     def __post_init__(self) -> None:
