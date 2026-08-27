@@ -36,3 +36,28 @@ def test_session_restores_recent_list(tmp_path: Path) -> None:
     session.restore_recent([str(first), str(second)])
 
     assert session.serialize_recent() == [str(first.resolve()), str(second.resolve())]
+
+
+def test_session_recovers_and_discards_document(tmp_path: Path) -> None:
+    session = SessionManager(autosave_directory=tmp_path)
+    document = Document(24, 12)
+
+    assert session.tick_autosave(document) is True
+    assert session.has_recovery() is True
+
+    recovered = session.recover_or_none()
+
+    assert recovered is not None
+    assert recovered.width == 24
+    assert recovered.height == 12
+    assert session.discard_recovery() is True
+    assert session.recover_or_none() is None
+
+
+def test_session_returns_none_for_corrupted_recovery(tmp_path: Path) -> None:
+    session = SessionManager(autosave_directory=tmp_path)
+    session.recovery_path.parent.mkdir(parents=True, exist_ok=True)
+    session.recovery_path.write_bytes(b"broken")
+
+    assert session.has_recovery() is True
+    assert session.recover_or_none() is None
