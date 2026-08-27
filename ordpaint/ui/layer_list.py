@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QAbstractItemView, QListWidget
 
 
@@ -21,7 +21,7 @@ class LayerListWidget(QListWidget):
         self.setAcceptDrops(True)
         self.setDropIndicatorShown(True)
         self.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
-        self.setDefaultDropAction(__import__("PySide6.QtCore", fromlist=["Qt"]).Qt.DropAction.MoveAction)
+        self.setDefaultDropAction(Qt.DropAction.MoveAction)
         self._drag_source_row: int | None = None
 
     def startDrag(self, supported_actions) -> None:
