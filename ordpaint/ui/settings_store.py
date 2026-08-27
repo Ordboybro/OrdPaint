@@ -6,12 +6,14 @@ from ordpaint.core.ui_state import UIState
 
 
 class SettingsStore:
-    """Small QSettings adapter for the Qt-free :class:`UIState` model."""
+    """Qt persistence adapter for the UI-independent :class:`UIState` model."""
 
     GROUP = "ui"
+    ORGANIZATION = "OrdStudio"
+    APPLICATION = "OrdPaint"
 
     def __init__(self, settings: QSettings | None = None) -> None:
-        self.settings = settings or QSettings("Ordboy", "OrdPaint")
+        self.settings = settings or QSettings(self.ORGANIZATION, self.APPLICATION)
 
     def load(self) -> UIState:
         settings = self.settings
