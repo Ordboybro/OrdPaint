@@ -19,6 +19,22 @@ def test_layer_move_and_duplicate(qt_app):
     assert duplicate.name.startswith("Top copy")
 
 
+def test_exact_layer_reorder_keeps_active_layer(qt_app):
+    document = Document(64, 64)
+    document.rename_active_layer("Bottom")
+    document.add_layer("Middle")
+    document.add_layer("Top")
+    before = document.revision
+
+    assert document.move_layer(2, 0) is True
+    assert [layer.name for layer in document.layers] == ["Top", "Bottom", "Middle"]
+    assert document.active_index == 0
+    assert document.revision == before + 1
+    assert document.move_layer(0, 0) is False
+    assert document.move_layer(-1, 0) is False
+    assert document.move_layer(0, 3) is False
+
+
 def test_remove_keeps_one_layer(qt_app):
     document = Document(32, 32)
     assert document.remove_active_layer() is False
