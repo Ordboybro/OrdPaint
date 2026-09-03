@@ -109,17 +109,11 @@ class MainWindow(BaseMainWindow):
         self._refresh_layers()
 
     def _install_transform_actions(self) -> None:
-        self.begin_transform_action = QAction(
-            "Свободное трансформирование", self, shortcut="Ctrl+T"
-        )
+        self.begin_transform_action = QAction("Свободное трансформирование", self, shortcut="Ctrl+T")
         self.begin_transform_action.triggered.connect(self._begin_transform)
-        self.commit_transform_action = QAction(
-            "Применить трансформацию", self, shortcut="Return"
-        )
+        self.commit_transform_action = QAction("Применить трансформацию", self, shortcut="Return")
         self.commit_transform_action.triggered.connect(self._commit_transform)
-        self.cancel_transform_action = QAction(
-            "Отменить трансформацию", self, shortcut="Escape"
-        )
+        self.cancel_transform_action = QAction("Отменить трансформацию", self, shortcut="Escape")
         self.cancel_transform_action.triggered.connect(self._cancel_transform)
         self.flip_horizontal_action = QAction("Отразить по горизонтали", self)
         self.flip_horizontal_action.triggered.connect(self._flip_transform_horizontal)
@@ -128,9 +122,7 @@ class MainWindow(BaseMainWindow):
         self.rotate_clockwise_action = QAction("Повернуть на 90° вправо", self)
         self.rotate_clockwise_action.triggered.connect(self._rotate_transform_clockwise)
         self.rotate_counterclockwise_action = QAction("Повернуть на 90° влево", self)
-        self.rotate_counterclockwise_action.triggered.connect(
-            self._rotate_transform_counterclockwise
-        )
+        self.rotate_counterclockwise_action.triggered.connect(self._rotate_transform_counterclockwise)
         menu = self.menuBar().addMenu("Трансформация")
         menu.addActions(
             [
@@ -199,16 +191,14 @@ class MainWindow(BaseMainWindow):
 
     def _refresh_recent_menu(self) -> None:
         self.recent_menu.clear()
-        paths = self.session.recent.existing_paths()
+        paths = self.session.recent.existing()
         if not paths:
             action = self.recent_menu.addAction("Нет недавних проектов")
             action.setEnabled(False)
             return
         for path in paths:
             action = self.recent_menu.addAction(str(path))
-            action.triggered.connect(
-                lambda checked=False, value=str(path): self.open_recent_project(value)
-            )
+            action.triggered.connect(lambda checked=False, value=str(path): self.open_recent_project(value))
         self.recent_menu.addSeparator()
         self.recent_menu.addAction("Очистить список", self._clear_recent_projects)
 
