@@ -25,7 +25,7 @@ jobs:
         shell: pwsh
         run: Compress-Archive -Path dist/OrdPaint/* -DestinationPath OrdPaint-Windows.zip
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: OrdPaint-Windows
           path: OrdPaint-Windows.zip
