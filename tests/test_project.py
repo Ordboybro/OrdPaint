@@ -1,9 +1,11 @@
+import json
 from pathlib import Path
 
+import pytest
 from PySide6.QtGui import QColor, QPainter
 
 from ordpaint.core.document import Document
-from ordpaint.core.project import load_project, save_project
+from ordpaint.core.project import ProjectError, load_project, save_project
 
 
 def test_project_roundtrip(tmp_path: Path, qt_app):
@@ -36,3 +38,22 @@ def test_project_roundtrip_preserves_qpainter_blend_mode(tmp_path: Path, qt_app)
     restored = load_project(path)
 
     assert restored.active_layer.blend_mode == QPainter.CompositionMode.CompositionMode_Multiply
+
+
+def test_load_project_rejects_malformed_json(tmp_path: Path, qt_app):
+    path = tmp_path / "broken.ordpaint"
+    path.write_text("{not-json", encoding="utf-8")
+
+    with pytest.raises(ProjectError):
+        load_project(path)
+
+
+def test_load_project_rejects_unsupported_version(tmp_path: Path, qt_app):
+    path = tmp_path / "future.ordpaint"
+    path.write_text(
+        json.dumps({"format": "ordpaint", "version": 999, "width": 8, "height": 8, "layers": []}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ProjectError):
+        load_project(path)
