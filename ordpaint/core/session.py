@@ -49,7 +49,10 @@ class SessionManager:
         return self.autosave.discard()
 
     def tick_autosave(self, document: Document) -> bool:
-        self.autosave.path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            self.autosave.path.parent.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            return False
         return self.autosave.autosave(document)
 
     def clear_recovery(self) -> bool:
