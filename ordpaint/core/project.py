@@ -14,6 +14,7 @@ from .layer import Layer
 PROJECT_VERSION = 1
 PROJECT_FORMAT = "ordpaint"
 MAX_PROJECT_PIXELS = 100_000_000
+MAX_TOTAL_LAYER_PIXELS = 128_000_000
 MAX_LAYERS = 512
 MAX_PROJECT_BYTES = 512 * 1024 * 1024
 MAX_LAYER_NAME_LENGTH = 128
@@ -51,10 +52,13 @@ def _decode_png(value: str) -> QPixmap:
 
 def save_project(document: Document, path: str | Path) -> None:
     destination = Path(path).expanduser()
-    if document.width * document.height > MAX_PROJECT_PIXELS:
+    document_pixels = document.width * document.height
+    if document_pixels > MAX_PROJECT_PIXELS:
         raise ProjectError("Document is too large to save safely")
     if not document.layers or len(document.layers) > MAX_LAYERS:
         raise ProjectError("Invalid layer count")
+    if document_pixels * len(document.layers) > MAX_TOTAL_LAYER_PIXELS:
+        raise ProjectError("Project contains too many layer pixels to save safely")
 
     payload = {
         "format": PROJECT_FORMAT,
@@ -125,12 +129,15 @@ def load_project(path: str | Path) -> Document:
         height = int(payload["height"])
     except (KeyError, TypeError, ValueError) as exc:
         raise ProjectError("Invalid project dimensions") from exc
-    if width < 1 or height < 1 or width * height > MAX_PROJECT_PIXELS:
+    document_pixels = width * height
+    if width < 1 or height < 1 or document_pixels > MAX_PROJECT_PIXELS:
         raise ProjectError("Invalid project dimensions")
 
     raw_layers = payload.get("layers")
     if not isinstance(raw_layers, list) or not raw_layers or len(raw_layers) > MAX_LAYERS:
         raise ProjectError("Invalid project layer count")
+    if document_pixels * len(raw_layers) > MAX_TOTAL_LAYER_PIXELS:
+        raise ProjectError("Project contains too many layer pixels to load safely")
 
     layers: list[Layer] = []
     for item in raw_layers:
