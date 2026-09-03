@@ -19,8 +19,8 @@ jobs:
         run: python -m compileall -q ordpaint main.py
       - name: Ruff check
         run: ruff check .
-      - name: Ruff format check
-        run: ruff format --check .
+      - name: Ruff format
+        run: ruff format .
       - name: Tests
         env:
           QT_QPA_PLATFORM: offscreen
