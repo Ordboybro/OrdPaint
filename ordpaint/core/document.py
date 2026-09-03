@@ -17,7 +17,8 @@ class Document:
     active_index: int = 0
     revision: int = field(default=0, init=False, repr=False, compare=False)
     _composite_cache: OrderedDict[tuple[int, int, int, int], QPixmap] = field(default_factory=OrderedDict, init=False, repr=False, compare=False)
-    _COMPOSITE_CACHE_LIMIT = 8
+    _COMPOSITE_CACHE_LIMIT = 4
+    _COMPOSITE_CACHE_MAX_PIXELS = 4_000_000
 
     def __post_init__(self) -> None:
         if self.width < 1 or self.height < 1:
@@ -194,10 +195,12 @@ class Document:
     def composite(self, background: QColor | None = None) -> QPixmap:
         color = background if background is not None else QColor("white")
         key = (color.red(), color.green(), color.blue(), color.alpha())
-        cached = self._composite_cache.get(key)
-        if cached is not None:
-            self._composite_cache.move_to_end(key)
-            return cached.copy()
+        use_cache = self.width * self.height <= self._COMPOSITE_CACHE_MAX_PIXELS
+        if use_cache:
+            cached = self._composite_cache.get(key)
+            if cached is not None:
+                self._composite_cache.move_to_end(key)
+                return cached.copy()
         result = QPixmap(self.width, self.height)
         result.fill(color)
         painter = QPainter(result)
@@ -208,8 +211,9 @@ class Document:
             painter.setCompositionMode(layer.blend_mode)
             painter.drawPixmap(0, 0, layer.pixmap)
         painter.end()
-        self._composite_cache[key] = result
-        self._composite_cache.move_to_end(key)
-        while len(self._composite_cache) > self._COMPOSITE_CACHE_LIMIT:
-            self._composite_cache.popitem(last=False)
+        if use_cache:
+            self._composite_cache[key] = result
+            self._composite_cache.move_to_end(key)
+            while len(self._composite_cache) > self._COMPOSITE_CACHE_LIMIT:
+                self._composite_cache.popitem(last=False)
         return result.copy()
