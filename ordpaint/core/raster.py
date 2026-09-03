@@ -20,9 +20,7 @@ def draw_line(
     if clip is not None:
         painter.setClipRect(clip)
     painter.setCompositionMode(
-        QPainter.CompositionMode.CompositionMode_Clear
-        if erase
-        else QPainter.CompositionMode.CompositionMode_SourceOver
+        QPainter.CompositionMode.CompositionMode_Clear if erase else QPainter.CompositionMode.CompositionMode_SourceOver
     )
     draw_color = QColor(color)
     draw_color.setAlpha(round(draw_color.alpha() * max(0, min(100, opacity)) / 100))
