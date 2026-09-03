@@ -140,9 +140,7 @@ def load_project(path: str | Path) -> Document:
         if pixmap.size().width() != width or pixmap.size().height() != height:
             raise ProjectError("Layer dimensions do not match document")
         try:
-            blend_value = int(
-                item.get("blend_mode", int(QPainter.CompositionMode.CompositionMode_SourceOver.value))
-            )
+            blend_value = int(item.get("blend_mode", int(QPainter.CompositionMode.CompositionMode_SourceOver.value)))
             blend_mode = QPainter.CompositionMode(blend_value)
         except (TypeError, ValueError):
             blend_mode = QPainter.CompositionMode.CompositionMode_SourceOver
