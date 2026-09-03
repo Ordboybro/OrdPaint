@@ -1,4 +1,4 @@
 PySide6>=6.7,<7
 pytest>=8.0
-ruff>=0.6
+ruff>=0.16.5
 pyinstaller>=6.0
