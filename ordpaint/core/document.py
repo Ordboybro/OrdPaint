@@ -16,7 +16,9 @@ class Document:
     layers: list[Layer] = field(default_factory=list)
     active_index: int = 0
     revision: int = field(default=0, init=False, repr=False, compare=False)
-    _composite_cache: OrderedDict[tuple[int, int, int, int], QPixmap] = field(default_factory=OrderedDict, init=False, repr=False, compare=False)
+    _composite_cache: OrderedDict[tuple[int, int, int, int], QPixmap] = field(
+        default_factory=OrderedDict, init=False, repr=False, compare=False
+    )
     _COMPOSITE_CACHE_LIMIT = 4
     _COMPOSITE_CACHE_MAX_PIXELS = 4_000_000
 
@@ -36,7 +38,12 @@ class Document:
         self._composite_cache.clear()
 
     def copy(self) -> "Document":
-        return Document(width=self.width, height=self.height, layers=[layer.copy() for layer in self.layers], active_index=self.active_index)
+        return Document(
+            width=self.width,
+            height=self.height,
+            layers=[layer.copy() for layer in self.layers],
+            active_index=self.active_index,
+        )
 
     def add_layer(self, name: str | None = None, index: int | None = None) -> Layer:
         pixmap = QPixmap(self.width, self.height)
