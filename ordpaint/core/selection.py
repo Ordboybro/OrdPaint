@@ -74,7 +74,12 @@ class Selection:
             QRect(source.left(), source.top(), source.width(), intersection.top() - source.top()),
             QRect(source.left(), intersection.bottom() + 1, source.width(), source.bottom() - intersection.bottom()),
             QRect(source.left(), intersection.top(), intersection.left() - source.left(), intersection.height()),
-            QRect(intersection.right() + 1, intersection.top(), source.right() - intersection.right(), intersection.height()),
+            QRect(
+                intersection.right() + 1,
+                intersection.top(),
+                source.right() - intersection.right(),
+                intersection.height(),
+            ),
         ]
         candidates = [candidate for candidate in candidates if not candidate.isEmpty()]
         return max(candidates, key=lambda candidate: candidate.width() * candidate.height()) if candidates else None
