@@ -33,3 +33,11 @@ def test_composite_cache_refreshes_lru_order() -> None:
 
     keys = list(document._composite_cache)
     assert keys[-1] == (first.red(), first.green(), first.blue(), first.alpha())
+
+
+def test_composite_cache_is_skipped_for_large_documents() -> None:
+    document = Document(2001, 2001)
+
+    document.composite(QColor("transparent"))
+
+    assert not document._composite_cache
