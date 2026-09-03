@@ -21,6 +21,7 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM"]
 ignore = ["E501", "I001", "UP035", "UP037", "SIM105"]
+per-file-ignores = { "ordpaint/ui/canvas.py" = ["F401"] }
 
 [tool.ruff.format]
 quote-style = "double"
