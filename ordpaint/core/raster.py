@@ -20,7 +20,9 @@ def draw_line(
     if clip is not None:
         painter.setClipRect(clip)
     painter.setCompositionMode(
-        QPainter.CompositionMode.CompositionMode_Clear if erase else QPainter.CompositionMode.CompositionMode_SourceOver
+        QPainter.CompositionMode.CompositionMode_Clear
+        if erase
+        else QPainter.CompositionMode.CompositionMode_SourceOver
     )
     draw_color = QColor(color)
     draw_color.setAlpha(round(draw_color.alpha() * max(0, min(100, opacity)) / 100))
@@ -100,13 +102,7 @@ def flood_fill(
     tolerance: int = 0,
     clip: QRect | None = None,
 ) -> bool:
-    """Fill a contiguous region using a scanline flood-fill algorithm.
-
-    The previous per-pixel queue/visited-set implementation could allocate a large
-    Python object for every visited pixel. Scanline spans keep memory bounded by the
-    number of pending horizontal regions and use QImage's raw QRgb access in the
-    hot loop.
-    """
+    """Fill a contiguous region using scanline spans with bounded Python memory."""
     image = pixmap.toImage().convertToFormat(QImage.Format.Format_ARGB32)
     bounds = QRect(0, 0, image.width(), image.height())
     allowed = bounds if clip is None else bounds.intersected(clip)
@@ -114,9 +110,8 @@ def flood_fill(
         return False
 
     tolerance = max(0, min(255, int(tolerance)))
-    target = image.pixelColor(point)
     replacement_rgba = replacement.rgba()
-    target_rgba = target.rgba()
+    target_rgba = image.pixel(point)
     if _color_distance_rgba(target_rgba, replacement_rgba) <= tolerance:
         return False
 
@@ -165,15 +160,6 @@ def flood_fill(
     if changed:
         pixmap.swap(QPixmap.fromImage(image))
     return changed
-
-
-def _color_distance(left: QColor, right: QColor) -> int:
-    return max(
-        abs(left.red() - right.red()),
-        abs(left.green() - right.green()),
-        abs(left.blue() - right.blue()),
-        abs(left.alpha() - right.alpha()),
-    )
 
 
 def _color_distance_rgba(left: int, right: int) -> int:
