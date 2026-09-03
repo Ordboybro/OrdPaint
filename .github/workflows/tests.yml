@@ -4,6 +4,9 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: write
+
 jobs:
   quality:
     runs-on: ubuntu-latest
@@ -21,8 +24,21 @@ jobs:
         run: python -m compileall -q ordpaint main.py
       - name: Ruff check
         run: ruff check .
-      - name: Ruff format check
-        run: ruff format --check .
+      - name: Ruff format
+        run: ruff format .
+      - name: Commit formatting on main
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "Formatting is already clean."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "style: apply Ruff formatting"
+          git push
       - name: Tests
         env:
           QT_QPA_PLATFORM: offscreen
