@@ -1,10 +1,11 @@
+import json
 from pathlib import Path
 
 import pytest
 from PySide6.QtGui import QPixmap
 
 from ordpaint.core.document import Document
-from ordpaint.core.project import MAX_PROJECT_BYTES, ProjectError, load_project, save_project
+from ordpaint.core.project import MAX_PROJECT_BYTES, MAX_TOTAL_LAYER_PIXELS, ProjectError, load_project, save_project
 
 
 def test_load_rejects_oversized_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -21,6 +22,25 @@ def test_load_rejects_invalid_utf8(tmp_path: Path) -> None:
     path.write_bytes(b"\xff\xfe\xfd")
 
     with pytest.raises(ProjectError, match="Could not read project"):
+        load_project(path)
+
+
+def test_load_rejects_excessive_total_layer_pixels(tmp_path: Path) -> None:
+    width = 10_000
+    height = 10_000
+    payload = {
+        "format": "ordpaint",
+        "version": 1,
+        "width": width,
+        "height": height,
+        "active_index": 0,
+        "layers": [{"image": ""}, {"image": ""}],
+    }
+    path = tmp_path / "too-many-pixels.ordpaint"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    assert width * height * 2 > MAX_TOTAL_LAYER_PIXELS
+    with pytest.raises(ProjectError, match="too many layer pixels"):
         load_project(path)
 
 
