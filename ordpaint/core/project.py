@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 
 from PySide6.QtCore import QByteArray, QBuffer, QIODevice, Qt
-from PySide6.QtGui import QImage, QPixmap
+from PySide6.QtGui import QImage, QPainter, QPixmap
 
 from .document import Document
 from .layer import Layer
@@ -140,10 +140,12 @@ def load_project(path: str | Path) -> Document:
         if pixmap.size().width() != width or pixmap.size().height() != height:
             raise ProjectError("Layer dimensions do not match document")
         try:
-            blend_value = int(item.get("blend_mode", int(Qt.CompositionMode.CompositionMode_SourceOver.value)))
-            blend_mode = Qt.CompositionMode(blend_value)
+            blend_value = int(
+                item.get("blend_mode", int(QPainter.CompositionMode.CompositionMode_SourceOver.value))
+            )
+            blend_mode = QPainter.CompositionMode(blend_value)
         except (TypeError, ValueError):
-            blend_mode = Qt.CompositionMode.CompositionMode_SourceOver
+            blend_mode = QPainter.CompositionMode.CompositionMode_SourceOver
         try:
             opacity = int(item.get("opacity", 100))
         except (TypeError, ValueError) as exc:
