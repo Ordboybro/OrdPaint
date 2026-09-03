@@ -21,6 +21,34 @@ def test_flood_fill_changes_region(qt_app):
     assert pixmap.toImage().pixelColor(2, 2).blue() == 255
 
 
+def test_flood_fill_respects_clip(qt_app):
+    pixmap = QPixmap(10, 10)
+    pixmap.fill(Qt.GlobalColor.white)
+    changed = flood_fill(pixmap, QPoint(2, 2), QColor("blue"), clip=QRect(0, 0, 4, 10))
+    assert changed
+    image = pixmap.toImage()
+    assert image.pixelColor(2, 2).blue() == 255
+    assert image.pixelColor(5, 2).red() == 255
+
+
+def test_flood_fill_tolerance_crosses_similar_colors(qt_app):
+    pixmap = QPixmap(3, 1)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    image = pixmap.toImage()
+    image.setPixelColor(0, 0, QColor(100, 100, 100))
+    image.setPixelColor(1, 0, QColor(104, 100, 100))
+    image.setPixelColor(2, 0, QColor(120, 100, 100))
+    pixmap = QPixmap.fromImage(image)
+
+    changed = flood_fill(pixmap, QPoint(0, 0), QColor("blue"), tolerance=5)
+
+    assert changed
+    result = pixmap.toImage()
+    assert result.pixelColor(0, 0).blue() == 255
+    assert result.pixelColor(1, 0).blue() == 255
+    assert result.pixelColor(2, 0).red() == 120
+
+
 def test_extract_and_paste(qt_app):
     source = QPixmap(10, 10)
     source.fill(Qt.GlobalColor.red)
