@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from collections import deque
-
 from PySide6.QtCore import QPoint, QRect, Qt
 from PySide6.QtGui import QColor, QImage, QPainter, QPen, QPixmap
 
@@ -102,33 +100,67 @@ def flood_fill(
     tolerance: int = 0,
     clip: QRect | None = None,
 ) -> bool:
+    """Fill a contiguous region using a scanline flood-fill algorithm.
+
+    The previous per-pixel queue/visited-set implementation could allocate a large
+    Python object for every visited pixel. Scanline spans keep memory bounded by the
+    number of pending horizontal regions and use QImage's raw QRgb access in the
+    hot loop.
+    """
     image = pixmap.toImage().convertToFormat(QImage.Format.Format_ARGB32)
     bounds = QRect(0, 0, image.width(), image.height())
     allowed = bounds if clip is None else bounds.intersected(clip)
     if allowed.isEmpty() or not allowed.contains(point):
         return False
+
+    tolerance = max(0, min(255, int(tolerance)))
     target = image.pixelColor(point)
-    if _color_distance(target, replacement) <= tolerance:
+    replacement_rgba = replacement.rgba()
+    target_rgba = target.rgba()
+    if _color_distance_rgba(target_rgba, replacement_rgba) <= tolerance:
         return False
 
-    width, height = image.width(), image.height()
-    queue = deque([(point.x(), point.y())])
-    visited: set[tuple[int, int]] = set()
+    left_bound = allowed.left()
+    right_bound = allowed.right()
+    top_bound = allowed.top()
+    bottom_bound = allowed.bottom()
+
+    def matches(x: int, y: int) -> bool:
+        return _color_distance_rgba(image.pixel(x, y), target_rgba) <= tolerance
+
+    stack: list[tuple[int, int]] = [(point.x(), point.y())]
     changed = False
-    tolerance = max(0, min(255, int(tolerance)))
-    while queue:
-        x, y = queue.popleft()
-        if (x, y) in visited or not (0 <= x < width and 0 <= y < height):
+
+    while stack:
+        seed_x, y = stack.pop()
+        if not matches(seed_x, y):
             continue
-        if not allowed.contains(QPoint(x, y)):
-            continue
-        current = image.pixelColor(x, y)
-        if _color_distance(current, target) > tolerance:
-            continue
-        visited.add((x, y))
-        image.setPixelColor(x, y, replacement)
+
+        left = seed_x
+        while left > left_bound and matches(left - 1, y):
+            left -= 1
+
+        right = seed_x
+        while right < right_bound and matches(right + 1, y):
+            right += 1
+
+        for x in range(left, right + 1):
+            image.setPixel(x, y, replacement_rgba)
         changed = True
-        queue.extend(((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)))
+
+        for next_y in (y - 1, y + 1):
+            if not (top_bound <= next_y <= bottom_bound):
+                continue
+            x = left
+            while x <= right:
+                while x <= right and not matches(x, next_y):
+                    x += 1
+                if x > right:
+                    break
+                run_start = x
+                while x <= right and matches(x, next_y):
+                    x += 1
+                stack.append(((run_start + x - 1) // 2, next_y))
 
     if changed:
         pixmap.swap(QPixmap.fromImage(image))
@@ -141,4 +173,13 @@ def _color_distance(left: QColor, right: QColor) -> int:
         abs(left.green() - right.green()),
         abs(left.blue() - right.blue()),
         abs(left.alpha() - right.alpha()),
+    )
+
+
+def _color_distance_rgba(left: int, right: int) -> int:
+    return max(
+        abs(((left >> 16) & 0xFF) - ((right >> 16) & 0xFF)),
+        abs(((left >> 8) & 0xFF) - ((right >> 8) & 0xFF)),
+        abs((left & 0xFF) - (right & 0xFF)),
+        abs(((left >> 24) & 0xFF) - ((right >> 24) & 0xFF)),
     )
