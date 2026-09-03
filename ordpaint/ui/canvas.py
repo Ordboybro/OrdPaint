@@ -356,7 +356,9 @@ class Canvas(QWidget):
         dx = end.x() - start.x()
         dy = end.y() - start.y()
         side = max(abs(dx), abs(dy))
-        return QRect(start, QPoint(start.x() + (side if dx >= 0 else -side), start.y() + (side if dy >= 0 else -side))).normalized()
+        return QRect(
+            start, QPoint(start.x() + (side if dx >= 0 else -side), start.y() + (side if dy >= 0 else -side))
+        ).normalized()
 
     def paintEvent(self, event) -> None:
         del event
@@ -367,7 +369,11 @@ class Canvas(QWidget):
         painter.save()
         painter.setClipRect(self.rect())
         self._draw_checkerboard(painter, target)
-        composite = self._transform_preview_composite() if self.transform_active else self.document.composite(QColor(0, 0, 0, 0))
+        composite = (
+            self._transform_preview_composite()
+            if self.transform_active
+            else self.document.composite(QColor(0, 0, 0, 0))
+        )
         painter.drawPixmap(target, composite)
         if self.show_grid:
             self._draw_grid(painter, target)
@@ -376,7 +382,12 @@ class Canvas(QWidget):
         painter.save()
         painter.translate(top_left)
         painter.scale(self.zoom, self.zoom)
-        if self._drawing and self._start_canvas_pos and self._last_canvas_pos and self.tool in {Tool.LINE, Tool.RECTANGLE, Tool.ELLIPSE, Tool.SELECT_RECT}:
+        if (
+            self._drawing
+            and self._start_canvas_pos
+            and self._last_canvas_pos
+            and self.tool in {Tool.LINE, Tool.RECTANGLE, Tool.ELLIPSE, Tool.SELECT_RECT}
+        ):
             self._draw_shape_preview(painter, self._start_canvas_pos, self._last_canvas_pos)
         if self.selection.active and not self.transform_active:
             self._draw_selection(painter, self.selection.rect)
@@ -516,14 +527,18 @@ class Canvas(QWidget):
             if is_major:
                 painter.setPen(text_pen)
                 text = str(y)
-                painter.drawText(QPointF(left_rect.right() - font_metrics.horizontalAdvance(text) - 2, widget_y - 3), text)
+                painter.drawText(
+                    QPointF(left_rect.right() - font_metrics.horizontalAdvance(text) - 2, widget_y - 3), text
+                )
                 painter.setPen(tick_pen)
         painter.restore()
 
     def _draw_shape_preview(self, painter: QPainter, start: QPoint, end: QPoint) -> None:
         color = QColor("#63a4ff") if self.tool == Tool.SELECT_RECT else self._paint_color()
         style = Qt.PenStyle.DashLine if self.tool == Tool.SELECT_RECT else Qt.PenStyle.SolidLine
-        painter.setPen(QPen(color, max(1, self.brush_size / self.zoom), style, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+        painter.setPen(
+            QPen(color, max(1, self.brush_size / self.zoom), style, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+        )
         painter.setBrush(Qt.BrushStyle.NoBrush)
         if self.tool == Tool.LINE:
             painter.drawLine(start, end)
@@ -554,12 +569,30 @@ class Canvas(QWidget):
         return color
 
     def _draw_segment(self, start: QPoint, end: QPoint) -> None:
-        draw_line(self.document.active_layer.pixmap, start, end, self.color, self.brush_size, opacity=self.opacity, erase=self.tool == Tool.ERASER, clip=self.selection.rect)
+        draw_line(
+            self.document.active_layer.pixmap,
+            start,
+            end,
+            self.color,
+            self.brush_size,
+            opacity=self.opacity,
+            erase=self.tool == Tool.ERASER,
+            clip=self.selection.rect,
+        )
         self.document.touch()
         self.document_changed.emit()
 
     def _draw_shape(self, start: QPoint, end: QPoint) -> None:
-        draw_shape(self.document.active_layer.pixmap, self.tool.value, start, end, self.color, self.brush_size, opacity=self.opacity, clip=self.selection.rect)
+        draw_shape(
+            self.document.active_layer.pixmap,
+            self.tool.value,
+            start,
+            end,
+            self.color,
+            self.brush_size,
+            opacity=self.opacity,
+            clip=self.selection.rect,
+        )
         self.document.touch()
         self.document_changed.emit()
 
@@ -587,7 +620,9 @@ class Canvas(QWidget):
 
     def mousePressEvent(self, event) -> None:
         self.setFocus()
-        if event.button() == Qt.MouseButton.MiddleButton or (event.button() == Qt.MouseButton.LeftButton and event.modifiers() & Qt.KeyboardModifier.SpaceModifier):
+        if event.button() == Qt.MouseButton.MiddleButton or (
+            event.button() == Qt.MouseButton.LeftButton and event.modifiers() & Qt.KeyboardModifier.SpaceModifier
+        ):
             self._panning = True
             self._space_pan = event.button() == Qt.MouseButton.LeftButton
             self._last_pan_pos = event.position()
@@ -617,7 +652,16 @@ class Canvas(QWidget):
             return
         if self.tool == Tool.SELECT_RECT:
             modifiers = event.modifiers()
-            if self.selection.active and self.selection.contains(point) and not modifiers & (Qt.KeyboardModifier.ShiftModifier | Qt.KeyboardModifier.AltModifier | Qt.KeyboardModifier.ControlModifier):
+            if (
+                self.selection.active
+                and self.selection.contains(point)
+                and not modifiers
+                & (
+                    Qt.KeyboardModifier.ShiftModifier
+                    | Qt.KeyboardModifier.AltModifier
+                    | Qt.KeyboardModifier.ControlModifier
+                )
+            ):
                 self._moving_selection = True
                 self._selection_move_anchor = QPoint(point)
                 self._selection_initial_rect = QRect(self.selection.rect)
@@ -664,7 +708,12 @@ class Canvas(QWidget):
                 if self._transform_handle == TransformHandle.MOVE:
                     self.transform.state.move(delta, self._document_bounds())
                 else:
-                    self.transform.state.resize(self._transform_handle, delta, keep_aspect=bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier), bounds=self._document_bounds())
+                    self.transform.state.resize(
+                        self._transform_handle,
+                        delta,
+                        keep_aspect=bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier),
+                        bounds=self._document_bounds(),
+                    )
                 self._transform_last_pos = point
                 self.update()
                 return
@@ -694,7 +743,9 @@ class Canvas(QWidget):
 
     def mouseReleaseEvent(self, event) -> None:
         if self._panning:
-            if (self._space_pan and event.button() == Qt.MouseButton.LeftButton) or (not self._space_pan and event.button() == Qt.MouseButton.MiddleButton):
+            if (self._space_pan and event.button() == Qt.MouseButton.LeftButton) or (
+                not self._space_pan and event.button() == Qt.MouseButton.MiddleButton
+            ):
                 self._panning = False
                 self._space_pan = False
                 self.unsetCursor()
@@ -718,7 +769,11 @@ class Canvas(QWidget):
             if self.tool in {Tool.LINE, Tool.RECTANGLE, Tool.ELLIPSE}:
                 self._draw_shape(self._start_canvas_pos, self._last_canvas_pos)
             elif self.tool == Tool.SELECT_RECT:
-                rect = self._constrained_rect(self._start_canvas_pos, self._last_canvas_pos) if self._shift_pressed else self._normalized_rect(self._start_canvas_pos, self._last_canvas_pos)
+                rect = (
+                    self._constrained_rect(self._start_canvas_pos, self._last_canvas_pos)
+                    if self._shift_pressed
+                    else self._normalized_rect(self._start_canvas_pos, self._last_canvas_pos)
+                )
                 self.selection.set_rect(rect, self._selection_mode)
         self._finish_action(emit_changed=False)
         if self.tool == Tool.SELECT_RECT:
@@ -760,7 +815,12 @@ class Canvas(QWidget):
             elif event.key() == Qt.Key.Key_BracketLeft:
                 self.rotate_transform_counterclockwise()
             elif event.key() in {Qt.Key.Key_Left, Qt.Key.Key_Right, Qt.Key.Key_Up, Qt.Key.Key_Down}:
-                delta = {Qt.Key.Key_Left: (-1, 0), Qt.Key.Key_Right: (1, 0), Qt.Key.Key_Up: (0, -1), Qt.Key.Key_Down: (0, 1)}[event.key()]
+                delta = {
+                    Qt.Key.Key_Left: (-1, 0),
+                    Qt.Key.Key_Right: (1, 0),
+                    Qt.Key.Key_Up: (0, -1),
+                    Qt.Key.Key_Down: (0, 1),
+                }[event.key()]
                 if modifiers & Qt.KeyboardModifier.ShiftModifier:
                     delta = (delta[0] * 10, delta[1] * 10)
                 self.move_selection(*delta)
@@ -787,8 +847,18 @@ class Canvas(QWidget):
             self.paste_from_clipboard()
         elif event.key() == Qt.Key.Key_Delete:
             self.delete_selection()
-        elif self.tool == Tool.SELECT_RECT and event.key() in {Qt.Key.Key_Left, Qt.Key.Key_Right, Qt.Key.Key_Up, Qt.Key.Key_Down}:
-            delta = {Qt.Key.Key_Left: (-1, 0), Qt.Key.Key_Right: (1, 0), Qt.Key.Key_Up: (0, -1), Qt.Key.Key_Down: (0, 1)}[event.key()]
+        elif self.tool == Tool.SELECT_RECT and event.key() in {
+            Qt.Key.Key_Left,
+            Qt.Key.Key_Right,
+            Qt.Key.Key_Up,
+            Qt.Key.Key_Down,
+        }:
+            delta = {
+                Qt.Key.Key_Left: (-1, 0),
+                Qt.Key.Key_Right: (1, 0),
+                Qt.Key.Key_Up: (0, -1),
+                Qt.Key.Key_Down: (0, 1),
+            }[event.key()]
             if modifiers & Qt.KeyboardModifier.ShiftModifier:
                 delta = (delta[0] * 10, delta[1] * 10)
             self.move_selection(*delta)

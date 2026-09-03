@@ -131,7 +131,9 @@ def test_rotate_counterclockwise_preserves_nontransparent_pixel_count():
 
     state.rotate_90_counterclockwise()
 
-    pixels = [state.image.pixelColor(x, y).alpha() for y in range(state.image.height()) for x in range(state.image.width())]
+    pixels = [
+        state.image.pixelColor(x, y).alpha() for y in range(state.image.height()) for x in range(state.image.width())
+    ]
     assert state.image.size().width() == 3
     assert state.image.size().height() == 2
     assert sum(alpha > 0 for alpha in pixels) == 2
