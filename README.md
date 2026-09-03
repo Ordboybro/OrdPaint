@@ -107,11 +107,11 @@ python main.py
 
 ```bash
 ruff check .
-ruff format --check .
+ruff format .
 pytest -q
 ```
 
-CI runs all three checks on every push and pull request. Qt tests use the `offscreen` platform in CI.
+CI runs the linter, formatter and test suite on every push and pull request. On pushes to `main`, Ruff formatting changes are committed automatically so the branch stays consistently formatted. Qt tests use the `offscreen` platform in CI.
 
 ## Hotkeys
 
