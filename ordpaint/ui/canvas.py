@@ -458,11 +458,16 @@ class Canvas(QWidget):
 
     def _draw_checkerboard(self, painter: QPainter, rect: QRectF) -> None:
         size = max(4, min(24, round(12 * self.zoom)))
-        left, top = int(rect.left()), int(rect.top())
-        right, bottom = int(rect.right()), int(rect.bottom())
-        painter.fillRect(rect, QColor("#e8e8e8"))
-        for y in range(top - top % size, bottom + size, size):
-            for x in range(left - left % size, right + size, size):
+        visible = rect.intersected(QRectF(self.rect()))
+        if visible.isEmpty():
+            return
+        left, top = int(visible.left()), int(visible.top())
+        right, bottom = int(visible.right()), int(visible.bottom())
+        painter.fillRect(visible, QColor("#e8e8e8"))
+        start_x = left - (left % size)
+        start_y = top - (top % size)
+        for y in range(start_y, bottom + size, size):
+            for x in range(start_x, right + size, size):
                 if ((x // size) + (y // size)) % 2 == 0:
                     painter.fillRect(x, y, size, size, QColor("#d0d0d0"))
 
@@ -472,15 +477,23 @@ class Canvas(QWidget):
             return
         painter.save()
         painter.setClipRect(target)
+        visible_left = max(0, int((self.rect().left() - target.left()) / self.zoom) - self.grid_size)
+        visible_right = min(self.document.width, int((self.rect().right() - target.left()) / self.zoom) + self.grid_size)
+        visible_top = max(0, int((self.rect().top() - target.top()) / self.zoom) - self.grid_size)
+        visible_bottom = min(self.document.height, int((self.rect().bottom() - target.top()) / self.zoom) + self.grid_size)
+        first_x = (visible_left // self.grid_size) * self.grid_size
+        first_y = (visible_top // self.grid_size) * self.grid_size
+        last_x = ((visible_right + self.grid_size - 1) // self.grid_size) * self.grid_size
+        last_y = ((visible_bottom + self.grid_size - 1) // self.grid_size) * self.grid_size
         major = QPen(QColor(104, 116, 132, 130), 1)
         minor = QPen(QColor(92, 104, 120, 75), 1)
         show_minor = spacing >= 12
-        for x in range(0, self.document.width + 1, self.grid_size):
+        for x in range(first_x, last_x + 1, self.grid_size):
             widget_x = target.left() + x * self.zoom
             painter.setPen(major if x % (self.grid_size * 5) == 0 else minor)
             if show_minor or x % (self.grid_size * 5) == 0:
                 painter.drawLine(QPointF(widget_x, target.top()), QPointF(widget_x, target.bottom()))
-        for y in range(0, self.document.height + 1, self.grid_size):
+        for y in range(first_y, last_y + 1, self.grid_size):
             widget_y = target.top() + y * self.zoom
             painter.setPen(major if y % (self.grid_size * 5) == 0 else minor)
             if show_minor or y % (self.grid_size * 5) == 0:
@@ -511,7 +524,15 @@ class Canvas(QWidget):
         text_pen = QPen(QColor("#9da9b5"))
         tick_pen = QPen(QColor("#657486"), 1)
         painter.setPen(tick_pen)
-        for x in range(0, self.document.width + step, step):
+        visible_left = max(0, int((self.rect().left() - target.left()) / self.zoom) - step)
+        visible_right = min(self.document.width, int((self.rect().right() - target.left()) / self.zoom) + step)
+        visible_top = max(0, int((self.rect().top() - target.top()) / self.zoom) - step)
+        visible_bottom = min(self.document.height, int((self.rect().bottom() - target.top()) / self.zoom) + step)
+        first_x = (visible_left // step) * step
+        first_y = (visible_top // step) * step
+        last_x = ((visible_right + step - 1) // step) * step
+        last_y = ((visible_bottom + step - 1) // step) * step
+        for x in range(first_x, last_x + 1, step):
             widget_x = target.left() + x * self.zoom
             is_major = x % major_step == 0
             tick = size if is_major else size * 0.45
@@ -520,7 +541,7 @@ class Canvas(QWidget):
                 painter.setPen(text_pen)
                 painter.drawText(QPointF(widget_x + 3, top_rect.top() + font_metrics.ascent() + 2), str(x))
                 painter.setPen(tick_pen)
-        for y in range(0, self.document.height + step, step):
+        for y in range(first_y, last_y + 1, step):
             widget_y = target.top() + y * self.zoom
             is_major = y % major_step == 0
             tick = size if is_major else size * 0.45
