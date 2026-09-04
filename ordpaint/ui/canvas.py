@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QFontMetrics, QGuiApplication, QImage, QPainter, QPen, QPixmap
+from PySide6.QtGui import QColor, QFontMetrics, QGuiApplication, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QWidget
 
 from ordpaint.core.clipboard import crop_image
@@ -46,6 +46,7 @@ class Canvas(QWidget):
         self._drawing = False
         self._panning = False
         self._space_pan = False
+        self._space_held = False
         self._last_canvas_pos: QPoint | None = None
         self._start_canvas_pos: QPoint | None = None
         self._last_pan_pos = QPointF()
@@ -621,7 +622,7 @@ class Canvas(QWidget):
     def mousePressEvent(self, event) -> None:
         self.setFocus()
         if event.button() == Qt.MouseButton.MiddleButton or (
-            event.button() == Qt.MouseButton.LeftButton and event.modifiers() & Qt.KeyboardModifier.SpaceModifier
+            event.button() == Qt.MouseButton.LeftButton and self._space_held
         ):
             self._panning = True
             self._space_pan = event.button() == Qt.MouseButton.LeftButton
@@ -832,6 +833,7 @@ class Canvas(QWidget):
         if event.key() == Qt.Key.Key_Escape:
             self._cancel_interaction()
         elif event.key() == Qt.Key.Key_Space:
+            self._space_held = True
             self.setCursor(Qt.CursorShape.OpenHandCursor)
         elif modifiers & Qt.KeyboardModifier.ControlModifier and event.key() == Qt.Key.Key_T:
             self.begin_transform()
@@ -868,8 +870,10 @@ class Canvas(QWidget):
         event.accept()
 
     def keyReleaseEvent(self, event) -> None:
-        if event.key() == Qt.Key.Key_Space and not self._panning:
-            self.unsetCursor()
+        if event.key() == Qt.Key.Key_Space:
+            self._space_held = False
+            if not self._panning:
+                self.unsetCursor()
         super().keyReleaseEvent(event)
 
     def _finish_action(self, *, emit_changed: bool = False) -> None:
