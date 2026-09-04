@@ -244,7 +244,7 @@ class MainWindow(QMainWindow):
             ]
         )
         tools_menu = self.menuBar().addMenu("Инструменты")
-        tools_menu.addActions(self.tool_actions.values())
+        tools_menu.addActions(list(self.tool_actions.values()))
 
     def _create_tool_button(self, action: QAction, text: str) -> QToolButton:
         button = QToolButton()
