@@ -55,7 +55,8 @@ The project is designed as a real portfolio-grade application rather than a sing
 - persistent Qt UI settings;
 - autosave;
 - crash-recovery draft support;
-- safe handling of invalid recovery data.
+- safe handling of invalid recovery data;
+- bounded project and layer resource limits to reject pathological files safely.
 
 ## Architecture
 
@@ -107,11 +108,11 @@ python main.py
 
 ```bash
 ruff check .
-ruff format .
+ruff format --check .
 pytest -q
 ```
 
-CI runs the linter, formatter and test suite on every push and pull request. On pushes to `main`, Ruff formatting changes are committed automatically so the branch stays consistently formatted. Qt tests use the `offscreen` platform in CI.
+CI runs the linter, formatter and test suite on every push and pull request. Headless Qt tests use the `minimal` platform backend on Linux CI because it is more reliable for widget construction than the offscreen backend. The Windows release workflow also compiles, tests and packages the application with PyInstaller.
 
 ## Hotkeys
 
@@ -149,7 +150,7 @@ OrdPaint uses a dark, compact editor layout with warm orange accents, a dedicate
 
 ## Status
 
-OrdPaint is in the final stabilization and polish stage. The core editor workflow is implemented; remaining work should focus on real-world runtime testing, visual refinement, performance profiling on large documents, broader regression coverage, packaging, and release documentation.
+OrdPaint is in final stabilization. The editor workflow, project format, layer system, selection/transform workflow, persistence services, automated regression suite, and Windows packaging pipeline are implemented. The remaining release gate is real desktop QA: run the application on Windows, exercise the major tools against the reference layout, and verify the packaged executable on the target machine.
 
 ## License
 
