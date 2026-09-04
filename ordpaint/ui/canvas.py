@@ -428,12 +428,14 @@ class Canvas(QWidget):
                 clear.fillRect(state.source_rect, Qt.GlobalColor.transparent)
                 clear.end()
                 painter.drawImage(0, 0, image)
+                if not state.create_new_layer:
+                    painter.drawImage(state.rect, state.image)
             else:
                 painter.drawPixmap(0, 0, layer.pixmap)
         if state.create_new_layer:
             painter.setOpacity(1.0)
             painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
-        painter.drawImage(state.rect, state.image)
+            painter.drawImage(state.rect, state.image)
         painter.end()
         return result
 
