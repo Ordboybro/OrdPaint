@@ -1,6 +1,9 @@
 import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+# The Qt offscreen backend can crash on some Linux runners when QMenuBar is
+# constructed. The minimal backend is sufficient for widget-level tests and
+# keeps the suite deterministic in headless CI environments.
+os.environ.setdefault("QT_QPA_PLATFORM", "minimal")
 
 import pytest
 from PySide6.QtWidgets import QApplication
