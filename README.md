@@ -112,7 +112,7 @@ ruff format --check .
 pytest -q
 ```
 
-CI runs the linter, formatter and test suite on every push and pull request. Headless Qt tests use the `minimal` platform backend on Linux CI because it is more reliable for widget construction than the offscreen backend. The Windows release workflow also compiles, tests and packages the application with PyInstaller.
+CI runs the linter, formatter and test suite on every push and pull request. Linux CI installs the required Qt runtime libraries and runs the widget tests under Xvfb for a real virtual X display. The Windows release workflow compiles, tests and packages the application with PyInstaller.
 
 ## Hotkeys
 
