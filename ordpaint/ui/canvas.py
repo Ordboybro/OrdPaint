@@ -480,9 +480,13 @@ class Canvas(QWidget):
         painter.save()
         painter.setClipRect(target)
         visible_left = max(0, int((self.rect().left() - target.left()) / self.zoom) - self.grid_size)
-        visible_right = min(self.document.width, int((self.rect().right() - target.left()) / self.zoom) + self.grid_size)
+        visible_right = min(
+            self.document.width, int((self.rect().right() - target.left()) / self.zoom) + self.grid_size
+        )
         visible_top = max(0, int((self.rect().top() - target.top()) / self.zoom) - self.grid_size)
-        visible_bottom = min(self.document.height, int((self.rect().bottom() - target.top()) / self.zoom) + self.grid_size)
+        visible_bottom = min(
+            self.document.height, int((self.rect().bottom() - target.top()) / self.zoom) + self.grid_size
+        )
         first_x = (visible_left // self.grid_size) * self.grid_size
         first_y = (visible_top // self.grid_size) * self.grid_size
         last_x = ((visible_right + self.grid_size - 1) // self.grid_size) * self.grid_size
@@ -527,9 +531,13 @@ class Canvas(QWidget):
         tick_pen = QPen(QColor("#657486"), 1)
         painter.setPen(tick_pen)
         visible_left = max(0, int((self.rect().left() - target.left()) / self.zoom) - step)
-        visible_right = min(self.document.width, int((self.rect().right() - target.left()) / self.zoom) + step)
+        visible_right = min(
+            self.document.width, int((self.rect().right() - target.left()) / self.zoom) + step
+        )
         visible_top = max(0, int((self.rect().top() - target.top()) / self.zoom) - step)
-        visible_bottom = min(self.document.height, int((self.rect().bottom() - target.top()) / self.zoom) + step)
+        visible_bottom = min(
+            self.document.height, int((self.rect().bottom() - target.top()) / self.zoom) + step
+        )
         first_x = (visible_left // step) * step
         first_y = (visible_top // step) * step
         last_x = ((visible_right + step - 1) // step) * step
