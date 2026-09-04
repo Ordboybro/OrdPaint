@@ -1,4 +1,5 @@
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QPainter
 
 from ordpaint.core.document import Document
 
@@ -65,10 +66,11 @@ def test_layer_rename_is_unique_and_touches_document(qt_app):
 def test_blend_mode_change_touches_document(qt_app):
     document = Document(32, 32)
     before = document.revision
-    assert document.set_layer_blend_mode(0, Qt.CompositionMode.CompositionMode_Multiply) is True
-    assert document.active_layer.blend_mode == Qt.CompositionMode.CompositionMode_Multiply
+    mode = QPainter.CompositionMode.CompositionMode_Multiply
+    assert document.set_layer_blend_mode(0, mode) is True
+    assert document.active_layer.blend_mode == mode
     assert document.revision == before + 1
-    assert document.set_layer_blend_mode(0, Qt.CompositionMode.CompositionMode_Multiply) is False
+    assert document.set_layer_blend_mode(0, mode) is False
 
 
 def test_clear_locked_layer_is_rejected(qt_app):
