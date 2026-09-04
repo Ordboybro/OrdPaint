@@ -10,3 +10,9 @@ from PySide6.QtWidgets import QApplication
 def qt_app():
     app = QApplication.instance()
     return app or QApplication([])
+
+
+@pytest.fixture(autouse=True)
+def ensure_qt_app(qt_app):
+    """Keep QPixmap/QPainter tests safe even when they omit an explicit fixture."""
+    return qt_app
