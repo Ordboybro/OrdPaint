@@ -33,9 +33,9 @@ jobs:
         run: ruff format --check .
       - name: Tests on Linux
         if: runner.os == 'Linux'
+        env:
+          QT_QPA_PLATFORM: xcb
         run: xvfb-run -a pytest -q
       - name: Tests on Windows
         if: runner.os == 'Windows'
-        env:
-          QT_QPA_PLATFORM: offscreen
         run: python -m pytest -q
