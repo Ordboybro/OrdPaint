@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QLabel, QSpinBox, QVBoxLayout
 
 
@@ -99,7 +98,9 @@ class ResizeDialog(QDialog):
         pixels = self.width_spin.value() * self.height_spin.value()
         valid = pixels <= MAX_PIXELS
         self._buttons.button(QDialogButtonBox.StandardButton.Ok).setEnabled(valid)
-        self.preview_label.setText(f"Результат: {self.width_spin.value()} × {self.height_spin.value()} px · {pixels / 1_000_000:.2f} MP")
+        self.preview_label.setText(
+            f"Результат: {self.width_spin.value()} × {self.height_spin.value()} px · {pixels / 1_000_000:.2f} MP"
+        )
 
     def options(self) -> ResizeOptions:
         return ResizeOptions(
