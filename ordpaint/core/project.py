@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 
 from PySide6.QtCore import QByteArray, QBuffer, QIODevice
-from PySide6.QtGui import QImage, QPainter, QPixmap
+from PySide6.QtGui import QImage, QImageReader, QPainter, QPixmap
 
 from .document import Document
 from .layer import Layer
@@ -44,7 +44,16 @@ def _decode_png(value: str) -> QPixmap:
         raw = QByteArray.fromBase64(value.encode("ascii"))
     except (UnicodeError, ValueError) as exc:
         raise ProjectError("Invalid layer image encoding") from exc
-    image = QImage.fromData(raw, "PNG")
+    buffer = QBuffer(raw)
+    if not buffer.open(QIODevice.OpenModeFlag.ReadOnly):
+        raise ProjectError("Invalid layer image buffer")
+    reader = QImageReader(buffer, b"PNG")
+    size = reader.size()
+    if not size.isValid() or size.width() < 1 or size.height() < 1:
+        raise ProjectError("Invalid layer image dimensions")
+    if size.width() * size.height() > MAX_PROJECT_PIXELS:
+        raise ProjectError("Layer image is too large to decode safely")
+    image = reader.read()
     if image.isNull():
         raise ProjectError("Invalid layer image")
     return QPixmap.fromImage(image)
