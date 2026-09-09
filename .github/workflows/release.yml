@@ -22,8 +22,6 @@ jobs:
       - name: Compile check
         run: python -m compileall -q ordpaint main.py
       - name: Run tests
-        env:
-          QT_QPA_PLATFORM: offscreen
         run: python -m pytest -q
       - name: Build application
         run: python -m PyInstaller --noconfirm --clean --windowed --name OrdPaint main.py
