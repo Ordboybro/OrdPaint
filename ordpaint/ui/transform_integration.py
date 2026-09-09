@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import MethodType
 
-from PySide6.QtCore import QPointF, Qt
+from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtWidgets import QDialog, QDialogButtonBox, QDoubleSpinBox, QFormLayout, QVBoxLayout
 
 
@@ -20,7 +20,6 @@ class TransformDialog(QDialog):
         self.y_spin = self._spin(state.rect.y(), " px")
         self.w_spin = self._spin(state.rect.width(), " px")
         self.h_spin = self._spin(state.rect.height(), " px")
-        self.keep_aspect = False
         form.addRow("X", self.x_spin)
         form.addRow("Y", self.y_spin)
         form.addRow("Ширина", self.w_spin)
@@ -34,7 +33,7 @@ class TransformDialog(QDialog):
     @staticmethod
     def _spin(value: float, suffix: str) -> QDoubleSpinBox:
         spin = QDoubleSpinBox()
-        spin.setRange(-1000000.0, 1000000.0)
+        spin.setRange(-1_000_000.0, 1_000_000.0)
         spin.setDecimals(2)
         spin.setSingleStep(1.0)
         spin.setValue(value)
@@ -58,10 +57,9 @@ def install(window) -> None:
         height = max(1.0, dialog.h_spin.value())
         if width * height > 100_000_000:
             return
-        state.rect = state.rect.__class__(
-            QPointF(dialog.x_spin.value(), dialog.y_spin.value()),
-            QPointF(dialog.x_spin.value() + width, dialog.y_spin.value() + height),
-        ).normalized()
+        x = dialog.x_spin.value()
+        y = dialog.y_spin.value()
+        state.rect = QRectF(QPointF(x, y), QPointF(x + width, y + height)).normalized()
         target = state.rect.toAlignedRect().size()
         if target.width() > 0 and target.height() > 0:
             state.image = state.image.scaled(
