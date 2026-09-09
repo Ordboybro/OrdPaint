@@ -106,8 +106,6 @@ def test_merge_rejects_locked_destination(qt_app):
 
 def test_resize_canvas_preserves_pixels_and_layers(qt_app):
     document = Document(4, 4)
-    document.active_layer.pixmap.fill(Qt.GlobalColor.transparent)
-    document.active_layer.pixmap.setMask(document.active_layer.pixmap.createMaskFromColor(Qt.GlobalColor.transparent))
     painter = QPainter(document.active_layer.pixmap)
     painter.fillRect(1, 1, 2, 2, Qt.GlobalColor.red)
     painter.end()
@@ -118,7 +116,7 @@ def test_resize_canvas_preserves_pixels_and_layers(qt_app):
     assert (document.width, document.height) == (8, 8)
     assert len(document.layers) == 2
     assert document.layers[0].pixmap.toImage().pixelColor(3, 3).red() > 0
-    assert document.layers[1].pixmap.toImage().pixelColor(0, 0).blue() == 0
+    assert document.layers[1].pixmap.toImage().pixelColor(0, 0).alpha() == 0
     assert document.layers[1].pixmap.toImage().pixelColor(2, 2).blue() > 0
 
 
