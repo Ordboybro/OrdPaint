@@ -12,6 +12,7 @@ from ordpaint.core.ui_state import UIState
 from ordpaint.ui.layer_list import LayerListWidget
 from ordpaint.ui.main_window import MainWindow as BaseMainWindow
 from ordpaint.ui.new_document_dialog import NewDocumentDialog
+from ordpaint.ui.resize_dialog import ResizeDialog
 from ordpaint.ui.settings_store import SettingsStore
 
 
@@ -29,6 +30,7 @@ class MainWindow(BaseMainWindow):
         self._install_layer_list()
         self._install_context_menu()
         self._install_transform_actions()
+        self._install_image_resize_actions()
         self._install_recent_menu()
         self._rewire_file_actions()
         self._apply_ui_state(self.ui_state)
@@ -39,13 +41,7 @@ class MainWindow(BaseMainWindow):
         QTimer.singleShot(0, self._offer_recovery)
 
     def _rewire_file_actions(self) -> None:
-        actions = (
-            self.new_action,
-            self.open_action,
-            self.import_action,
-            self.save_action,
-            self.save_as_action,
-        )
+        actions = (self.new_action, self.open_action, self.import_action, self.save_action, self.save_as_action)
         for action in actions:
             action.triggered.disconnect()
         self.new_action.triggered.connect(self.new_document)
@@ -136,6 +132,56 @@ class MainWindow(BaseMainWindow):
         ])
         self.canvas.transform_active_changed.connect(self._update_transform_actions)
         self._update_transform_actions(self.canvas.transform_active)
+
+    def _install_image_resize_actions(self) -> None:
+        self.resize_canvas_action = QAction("Размер холста…", self, shortcut="Ctrl+Alt+C")
+        self.resize_canvas_action.triggered.connect(self.resize_canvas)
+        self.scale_image_action = QAction("Размер изображения…", self, shortcut="Ctrl+Alt+I")
+        self.scale_image_action.triggered.connect(self.scale_image)
+        image_menu = next((action.menu() for action in self.menuBar().actions() if action.text() == "Изображение"), None)
+        if image_menu is not None:
+            image_menu.addSeparator()
+            image_menu.addActions([self.resize_canvas_action, self.scale_image_action])
+
+    def resize_canvas(self) -> None:
+        dialog = ResizeDialog(self, self.document.width, self.document.height, "Размер холста")
+        if dialog.exec() != ResizeDialog.DialogCode.Accepted:
+            return
+        options = dialog.options()
+        if (options.width, options.height) == (self.document.width, self.document.height):
+            return
+        self._push_history()
+        try:
+            changed = self.document.resize_canvas(options.width, options.height, "center")
+        except ValueError as exc:
+            self.history.undo(self.document)
+            QMessageBox.warning(self, "Размер холста", str(exc))
+            return
+        if changed:
+            self.dirty = True
+            self._refresh_layers()
+            self.canvas.update()
+            self._update_window_title()
+
+    def scale_image(self) -> None:
+        dialog = ResizeDialog(self, self.document.width, self.document.height, "Размер изображения")
+        if dialog.exec() != ResizeDialog.DialogCode.Accepted:
+            return
+        options = dialog.options()
+        if (options.width, options.height) == (self.document.width, self.document.height):
+            return
+        self._push_history()
+        try:
+            changed = self.document.scale_image(options.width, options.height)
+        except ValueError as exc:
+            self.history.undo(self.document)
+            QMessageBox.warning(self, "Размер изображения", str(exc))
+            return
+        if changed:
+            self.dirty = True
+            self._refresh_layers()
+            self.canvas.update()
+            self._update_window_title()
 
     def _replace_document(self, document: Document) -> None:
         super()._replace_document(document)
