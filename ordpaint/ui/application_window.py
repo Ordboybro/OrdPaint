@@ -3,10 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QTimer, Qt
-from PySide6.QtGui import QAction, QColor
-from PySide6.QtWidgets import QAbstractItemView, QMenu, QMessageBox
+from PySide6.QtGui import QAction, QColor, QImageReader, QPixmap
+from PySide6.QtWidgets import QAbstractItemView, QFileDialog, QMenu, QMessageBox
 
 from ordpaint.core.document import Document
+from ordpaint.core.project import MAX_PROJECT_PIXELS, ProjectError, load_project, save_project
 from ordpaint.core.session import SessionManager
 from ordpaint.core.ui_state import UIState
 from ordpaint.ui.layer_list import LayerListWidget
@@ -17,9 +18,10 @@ from ordpaint.ui.settings_store import SettingsStore
 
 
 class MainWindow(BaseMainWindow):
-    """Integrates persistent UI state and session services into the Qt editor."""
+    """Integrates persistent UI state, safe file I/O and session services."""
 
     AUTOSAVE_INTERVAL_MS = 30_000
+    MAX_IMPORT_BYTES = 256 * 1024 * 1024
 
     def __init__(self) -> None:
         super().__init__()
@@ -152,7 +154,7 @@ class MainWindow(BaseMainWindow):
             return
         self._push_history()
         try:
-            changed = self.document.resize_canvas(options.width, options.height, "center")
+            changed = self.document.resize_canvas(options.width, options.height, options.anchor)
         except ValueError as exc:
             self.history.undo(self.document)
             QMessageBox.warning(self, "Размер холста", str(exc))
@@ -170,9 +172,10 @@ class MainWindow(BaseMainWindow):
         options = dialog.options()
         if (options.width, options.height) == (self.document.width, self.document.height):
             return
+        mode = Qt.TransformationMode.FastTransformation if options.resampling == "fast" else Qt.TransformationMode.SmoothTransformation
         self._push_history()
         try:
-            changed = self.document.scale_image(options.width, options.height)
+            changed = self.document.scale_image(options.width, options.height, mode)
         except ValueError as exc:
             self.history.undo(self.document)
             QMessageBox.warning(self, "Размер изображения", str(exc))
@@ -186,6 +189,10 @@ class MainWindow(BaseMainWindow):
     def _replace_document(self, document: Document) -> None:
         super()._replace_document(document)
         if hasattr(self, "begin_transform_action"):
+            try:
+                self.canvas.transform_active_changed.disconnect(self._update_transform_actions)
+            except (RuntimeError, TypeError):
+                pass
             self.canvas.transform_active_changed.connect(self._update_transform_actions)
             self._update_transform_actions(self.canvas.transform_active)
 
@@ -212,14 +219,7 @@ class MainWindow(BaseMainWindow):
 
     def _update_transform_actions(self, active: bool) -> None:
         self.begin_transform_action.setEnabled(not active)
-        actions = (
-            self.commit_transform_action,
-            self.cancel_transform_action,
-            self.flip_horizontal_action,
-            self.flip_vertical_action,
-            self.rotate_clockwise_action,
-            self.rotate_counterclockwise_action,
-        )
+        actions = (self.commit_transform_action, self.cancel_transform_action, self.flip_horizontal_action, self.flip_vertical_action, self.rotate_clockwise_action, self.rotate_counterclockwise_action)
         for action in actions:
             action.setEnabled(active)
 
@@ -253,13 +253,12 @@ class MainWindow(BaseMainWindow):
             return
         if not self._confirm_discard():
             return
-        from ordpaint.core.project import ProjectError, load_project
-
         try:
             document = load_project(path)
         except ProjectError as exc:
             QMessageBox.critical(self, "Не удалось открыть проект", str(exc))
             self.session.recent.remove(path)
+            self._save_ui_state()
             return
         self.history.clear()
         self.history.mark_saved()
@@ -319,13 +318,7 @@ class MainWindow(BaseMainWindow):
         recovered = self.session.recover_or_none()
         if recovered is None:
             return
-        result = QMessageBox.question(
-            self,
-            "Восстановление проекта",
-            "Найден черновик после предыдущего завершения. Восстановить его?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.Yes,
-        )
+        result = QMessageBox.question(self, "Восстановление проекта", "Найден черновик после предыдущего завершения. Восстановить его?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.Yes)
         if result == QMessageBox.StandardButton.Yes:
             self.history.clear()
             self.current_path = None
@@ -360,24 +353,117 @@ class MainWindow(BaseMainWindow):
         self.session.clear_recovery()
         self._update_window_title()
 
+    @staticmethod
+    def _load_image_safely(path: str) -> QPixmap:
+        source = Path(path)
+        try:
+            if source.stat().st_size > MainWindow.MAX_IMPORT_BYTES:
+                raise ProjectError("Изображение слишком большое для безопасного открытия.")
+        except OSError as exc:
+            raise ProjectError("Не удалось прочитать файл изображения.") from exc
+        reader = QImageReader(str(source))
+        size = reader.size()
+        if not size.isValid() or size.width() < 1 or size.height() < 1:
+            raise ProjectError("Файл не является корректным изображением.")
+        if size.width() * size.height() > MAX_PROJECT_PIXELS:
+            raise ProjectError("Изображение слишком большое для безопасного открытия.")
+        image = reader.read()
+        if image.isNull():
+            raise ProjectError(reader.errorString() or "Не удалось декодировать изображение.")
+        return QPixmap.fromImage(image)
+
     def open_project(self) -> None:
-        before = self.current_path
-        super().open_project()
-        if self.current_path and self.current_path != before:
-            self.session.set_project(self.current_path)
-            self._save_ui_state()
+        if not self._confirm_discard():
+            return
+        path, _ = QFileDialog.getOpenFileName(self, "Открыть проект", "", "OrdPaint Project (*.ordpaint)")
+        if not path:
+            return
+        try:
+            document = load_project(path)
+        except ProjectError as exc:
+            QMessageBox.critical(self, "Не удалось открыть проект", str(exc))
+            return
+        self.history.clear()
+        self.history.mark_saved()
+        self.current_path = path
+        self.dirty = False
+        self._replace_document(document)
+        self._update_window_title()
+        self.session.set_project(path)
+        self._save_ui_state()
 
     def open_image(self) -> None:
-        super().open_image()
-        if self.dirty and self.current_path is None:
-            self.session.set_project(None)
+        if not self._confirm_discard():
+            return
+        path, _ = QFileDialog.getOpenFileName(self, "Импортировать изображение", "", "Images (*.png *.jpg *.jpeg *.bmp *.webp)")
+        if not path:
+            return
+        try:
+            pixmap = self._load_image_safely(path)
+        except ProjectError as exc:
+            QMessageBox.warning(self, "Не удалось открыть изображение", str(exc))
+            return
+        self.history.clear()
+        document = Document(pixmap.width(), pixmap.height())
+        document.active_layer.pixmap = pixmap
+        document.touch()
+        self.current_path = None
+        self.dirty = True
+        self._replace_document(document)
+        self._update_window_title()
+
+    def save_project(self) -> None:
+        if self.current_path and self.current_path.lower().endswith(".ordpaint"):
+            self._write_project(self.current_path)
+        else:
+            self.save_project_as()
+
+    def save_project_as(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(self, "Сохранить проект", "", "OrdPaint Project (*.ordpaint)")
+        if not path:
+            return
+        if not path.lower().endswith(".ordpaint"):
+            path += ".ordpaint"
+        self._write_project(path)
 
     def _write_project(self, path: str) -> None:
-        super()._write_project(path)
-        if self.current_path == path and not self.dirty:
-            self.session.set_project(path)
-            self.session.clear_recovery()
-            self._save_ui_state()
+        try:
+            save_project(self.document, path)
+        except (OSError, ProjectError) as exc:
+            QMessageBox.critical(self, "Ошибка сохранения", str(exc))
+            return
+        self.current_path = path
+        self.history.mark_saved()
+        self.dirty = False
+        self.session.set_project(path)
+        self.session.clear_recovery()
+        self._save_ui_state()
+        self.statusBar().showMessage("Проект сохранён", 3000)
+        self._update_window_title()
+
+    def export_image(self) -> None:
+        path, selected_filter = QFileDialog.getSaveFileName(self, "Экспортировать изображение", "", "PNG (*.png);;JPEG (*.jpg *.jpeg);;WEBP (*.webp);;BMP (*.bmp)")
+        if not path:
+            return
+        suffixes = {"PNG (*.png)": ".png", "JPEG (*.jpg *.jpeg)": ".jpg", "WEBP (*.webp)": ".webp", "BMP (*.bmp)": ".bmp"}
+        if not Path(path).suffix:
+            path += suffixes.get(selected_filter, ".png")
+        try:
+            if not self.document.composite().save(path):
+                raise OSError("Qt не смог записать изображение.")
+        except (OSError, RuntimeError) as exc:
+            QMessageBox.warning(self, "Ошибка экспорта", f"Не удалось экспортировать изображение: {exc}")
+            return
+        self.statusBar().showMessage("Изображение экспортировано", 3000)
+
+    def _confirm_discard(self) -> bool:
+        if not self.dirty:
+            return True
+        result = QMessageBox.question(self, "Несохранённые изменения", "В документе есть несохранённые изменения. Продолжить без сохранения?", QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel)
+        if result == QMessageBox.StandardButton.Save:
+            self.save_project()
+            return not self.dirty
+        return result == QMessageBox.StandardButton.Discard
 
     def closeEvent(self, event) -> None:
         if not self._confirm_discard():
