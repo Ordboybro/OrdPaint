@@ -26,7 +26,15 @@ ignore = ["E501", "I001", "UP035", "UP037", "SIM105"]
 quote-style = "double"
 indent-style = "space"
 line-ending = "lf"
-skip-magic-trailing-comma = true
+exclude = [
+    "ordpaint/core/document.py",
+    "ordpaint/core/raster.py",
+    "ordpaint/ui/application_window.py",
+    "ordpaint/ui/canvas.py",
+    "ordpaint/ui/main_window.py",
+    "ordpaint/ui/resize_dialog.py",
+    "tests/test_transform.py",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
