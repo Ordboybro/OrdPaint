@@ -102,3 +102,43 @@ def test_merge_rejects_locked_destination(qt_app):
     assert document.merge_active_down() is False
     document.set_active_index(0)
     assert document.merge_visible() is False
+
+
+def test_resize_canvas_preserves_pixels_and_layers(qt_app):
+    document = Document(4, 4)
+    document.active_layer.pixmap.fill(Qt.GlobalColor.transparent)
+    document.active_layer.pixmap.setMask(document.active_layer.pixmap.createMaskFromColor(Qt.GlobalColor.transparent))
+    painter = QPainter(document.active_layer.pixmap)
+    painter.fillRect(1, 1, 2, 2, Qt.GlobalColor.red)
+    painter.end()
+    document.add_layer("Top")
+    document.active_layer.pixmap.fill(Qt.GlobalColor.blue)
+
+    assert document.resize_canvas(8, 8, "center") is True
+    assert (document.width, document.height) == (8, 8)
+    assert len(document.layers) == 2
+    assert document.layers[0].pixmap.toImage().pixelColor(3, 3).red() > 0
+    assert document.layers[1].pixmap.toImage().pixelColor(0, 0).blue() == 0
+    assert document.layers[1].pixmap.toImage().pixelColor(2, 2).blue() > 0
+
+
+def test_resize_canvas_rejects_invalid_anchor_and_dimensions(qt_app):
+    document = Document(8, 8)
+    try:
+        document.resize_canvas(16, 16, "bad-anchor")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("invalid anchor must raise ValueError")
+    assert document.resize_canvas(0, 16) is False
+    assert document.resize_canvas(8, 8) is False
+
+
+def test_scale_image_resizes_all_layers(qt_app):
+    document = Document(4, 3)
+    document.add_layer("Top")
+    before_revision = document.revision
+    assert document.scale_image(8, 6) is True
+    assert (document.width, document.height) == (8, 6)
+    assert all(layer.pixmap.size().width() == 8 and layer.pixmap.size().height() == 6 for layer in document.layers)
+    assert document.revision == before_revision + 1
