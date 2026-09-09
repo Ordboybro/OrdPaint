@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 
 from PySide6.QtCore import QByteArray, QBuffer, QIODevice
-from PySide6.QtGui import QImage, QImageReader, QPainter, QPixmap
+from PySide6.QtGui import QImageReader, QPainter, QPixmap
 
 from .document import Document
 from .layer import Layer
