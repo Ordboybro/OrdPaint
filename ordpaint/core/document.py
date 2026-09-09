@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import OrderedDict
 from dataclasses import dataclass, field
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QColor, QPainter, QPixmap
 
 from .layer import Layer
@@ -186,6 +186,61 @@ class Document:
         if layer.locked:
             return False
         layer.pixmap.fill(Qt.GlobalColor.transparent)
+        self.touch()
+        return True
+
+    def resize_canvas(self, width: int, height: int, anchor: str = "center") -> bool:
+        """Resize the canvas while preserving every layer and its pixels.
+
+        Anchor controls where existing pixels stay: top-left, top, top-right,
+        left, center, right, bottom-left, bottom, or bottom-right.
+        """
+        width = int(width)
+        height = int(height)
+        if width < 1 or height < 1 or (width == self.width and height == self.height):
+            return False
+        if width * height > 100_000_000:
+            raise ValueError("Canvas is too large")
+        offsets = {
+            "top-left": (0, 0), "top": ((width - self.width) // 2, 0),
+            "top-right": (width - self.width, 0), "left": (0, (height - self.height) // 2),
+            "center": ((width - self.width) // 2, (height - self.height) // 2),
+            "right": (width - self.width, (height - self.height) // 2),
+            "bottom-left": (0, height - self.height), "bottom": ((width - self.width) // 2, height - self.height),
+            "bottom-right": (width - self.width, height - self.height),
+        }
+        if anchor not in offsets:
+            raise ValueError(f"Unknown canvas anchor: {anchor}")
+        dx, dy = offsets[anchor]
+        for layer in self.layers:
+            resized = QPixmap(width, height)
+            resized.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(resized)
+            painter.drawPixmap(dx, dy, layer.pixmap)
+            painter.end()
+            layer.pixmap = resized
+        self.width = width
+        self.height = height
+        self.touch()
+        return True
+
+    def scale_image(self, width: int, height: int) -> bool:
+        """Scale the entire document and every layer to a new pixel size."""
+        width = int(width)
+        height = int(height)
+        if width < 1 or height < 1 or (width == self.width and height == self.height):
+            return False
+        if width * height > 100_000_000:
+            raise ValueError("Image is too large")
+        for layer in self.layers:
+            layer.pixmap = layer.pixmap.scaled(
+                width,
+                height,
+                Qt.AspectRatioMode.IgnoreAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+        self.width = width
+        self.height = height
         self.touch()
         return True
 
