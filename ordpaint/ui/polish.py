@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QSpinBox,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -20,8 +21,13 @@ from PySide6.QtWidgets import (
 
 _ICON_PATHS = {
     "brush": "M4 20c3-1 4-4 7-7l7-7 2 2-7 7c-3 3-6 4-7 5l-2 0z",
-    "select": "M4 4h7v2H6v5H4zm9 0h7v7h-2V6h-5zM4 13h2v5h5v2H4zm14 0h2v7h-7v-2h5z",
+    "eraser": "M5 16l8-8 5 5-8 8H5l-2-3 2-2z",
+    "line": "M4 20L20 4",
+    "rectangle": "M4 5h16v14H4z",
+    "ellipse": "M4 12a8 6 0 1 0 16 0a8 6 0 1 0-16 0",
     "fill": "M6 4l10 10-4 4L2 8z M15 17h6v3h-6z",
+    "eyedropper": "M14 4l6 6-2 2-2-2-7 7H5v-4l7-7-2-2 2-2z",
+    "select": "M4 4h7v2H6v5H4zm9 0h7v7h-2V6h-5zM4 13h2v5h5v2H4zm14 0h2v7h-7v-2h5z",
     "undo": "M9 7H4l4-4v3c6 0 10 3 10 8 0 2-1 4-3 5 1-2 1-4 0-6-1-3-3-6-6-6v0z",
     "redo": "M15 7h5l-4-4v3C10 6 6 9 6 14c0 2 1 4 3 5-1-2-1-4 0-6 1-3 3-6 6-6v0z",
 }
@@ -150,6 +156,26 @@ def install(window) -> None:
         action = getattr(window, attr, None)
         if action is not None:
             action.setIcon(_icon(name))
+    tool_icons = {
+        "Кисть": "brush",
+        "Ластик": "eraser",
+        "Линия": "line",
+        "Прямоугольник": "rectangle",
+        "Эллипс": "ellipse",
+        "Заливка": "fill",
+        "Пипетка": "eyedropper",
+        "Выделение": "select",
+    }
+    for button in window.findChildren(QToolButton):
+        if button.objectName() != "toolPaletteButton":
+            continue
+        action = button.defaultAction()
+        name = tool_icons.get(action.text() if action is not None else "")
+        if name is not None:
+            button.setIcon(_icon(name))
+            button.setText("")
+            button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+            button.setToolTip(f"{action.text()}  •  {action.shortcut().toString()}")
     dock = QDockWidget("Цвет", window)
     dock.setObjectName("colorStudioDock")
     dock.setAllowedAreas(Qt.DockWidgetArea.RightDockWidgetArea | Qt.DockWidgetArea.LeftDockWidgetArea)
