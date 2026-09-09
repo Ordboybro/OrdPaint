@@ -140,3 +140,9 @@ def test_scale_image_resizes_all_layers(qt_app):
     assert (document.width, document.height) == (8, 6)
     assert all(layer.pixmap.size().width() == 8 and layer.pixmap.size().height() == 6 for layer in document.layers)
     assert document.revision == before_revision + 1
+
+
+def test_scale_image_accepts_fast_resampling(qt_app):
+    document = Document(4, 4)
+    assert document.scale_image(8, 8, Qt.TransformationMode.FastTransformation) is True
+    assert (document.width, document.height) == (8, 8)
