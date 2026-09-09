@@ -59,3 +59,13 @@ def test_history_limit():
         history.push(document)
         document = document.copy()
     assert len(history) == 2
+
+
+def test_history_memory_budget_trims_old_snapshots():
+    document = Document(100, 100)
+    history = History(limit=100, memory_limit_mb=1)
+    for _ in range(20):
+        history.push(document)
+        document = document.copy()
+    assert history.memory_usage_bytes <= 1 * 1024 * 1024
+    assert len(history) < 20
