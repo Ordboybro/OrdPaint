@@ -5,7 +5,7 @@ import math
 
 from PySide6.QtCore import QPointF, QSettings, Qt, Signal
 from PySide6.QtGui import QColor, QImage, QPainter, QPen
-from PySide6.QtWidgets import QCheckBox, QComboBox, QDockWidget, QFormLayout, QGridLayout, QHBoxLayout, QLabel, QPushButton, QSpinBox, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QDockWidget, QFormLayout, QGridLayout, QHBoxLayout, QLabel, QPushButton, QSpinBox, QVBoxLayout, QWidget
 
 
 class ColorWheel(QWidget):
@@ -19,7 +19,6 @@ class ColorWheel(QWidget):
 
     def _render(self) -> None:
         self._image.fill(Qt.GlobalColor.transparent)
-        center = QPointF(90, 90)
         for y in range(180):
             for x in range(180):
                 dx, dy = x - 89.5, y - 89.5
@@ -69,9 +68,9 @@ class ColorLabDock(QDockWidget):
         panel = QWidget()
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(10, 10, 10, 10)
-        layout.addWidget(ColorWheel())
-        self.wheel = layout.itemAt(0).widget()
+        self.wheel = ColorWheel()
         self.wheel.colorSelected.connect(self._set_color)
+        layout.addWidget(self.wheel)
 
         form = QFormLayout()
         self.h = QSpinBox(); self.h.setRange(0, 359)
@@ -95,7 +94,8 @@ class ColorLabDock(QDockWidget):
         self.bg.clicked.connect(lambda: self._set_color(self.background))
         swap.clicked.connect(self.swap_colors)
         bw.clicked.connect(self.reset_bw)
-        colors.addWidget(self.fg); colors.addWidget(self.bg); colors.addWidget(swap); colors.addWidget(bw)
+        for button in (self.fg, self.bg, swap, bw):
+            colors.addWidget(button)
         layout.addLayout(colors)
 
         palette_grid = QGridLayout()
@@ -154,8 +154,7 @@ class ColorLabDock(QDockWidget):
     def _from_channels(self) -> None:
         if self._syncing:
             return
-        color = QColor.fromHsv(self.h.value(), self.s.value(), self.v.value(), self.foreground.alpha())
-        self._set_color(color)
+        self._set_color(QColor.fromHsv(self.h.value(), self.s.value(), self.v.value(), self.foreground.alpha()))
 
     def swap_colors(self) -> None:
         self.foreground, self.background = self.background, self.foreground
@@ -185,7 +184,4 @@ class ColorLabDock(QDockWidget):
 
     def _refresh_palette(self) -> None:
         for index, button in enumerate(self.palette_buttons):
-            if index < len(self._palette):
-                button.setStyleSheet(f"background: {self._palette[index]};")
-            else:
-                button.setStyleSheet("")
+            button.setStyleSheet(f"background: {self._palette[index]};" if index < len(self._palette) else "")
