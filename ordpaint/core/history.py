@@ -13,34 +13,53 @@ class HistoryState:
 
 
 class History:
-    """Bounded snapshot history with transactional user actions."""
+    """Bounded snapshot history with transactional user actions and a memory budget."""
 
-    def __init__(self, limit: int = 100) -> None:
+    def __init__(self, limit: int = 100, memory_limit_mb: int = 512) -> None:
         self.limit = max(1, int(limit))
+        self.memory_limit_bytes = max(64, int(memory_limit_mb)) * 1024 * 1024
         self._undo: list[HistoryState] = []
         self._redo: list[HistoryState] = []
+        self._undo_bytes = 0
+        self._redo_bytes = 0
         self._next_id = 1
         self._current_id = 0
         self._saved_id = 0
         self._transaction: Document | None = None
         self._transaction_revision = -1
 
+    @staticmethod
+    def _estimate_bytes(document: Document) -> int:
+        pixels = max(1, document.width * document.height)
+        return pixels * 4 * max(1, len(document.layers))
+
     def clear(self) -> None:
         self._undo.clear()
         self._redo.clear()
+        self._undo_bytes = 0
+        self._redo_bytes = 0
         self._next_id = 1
         self._current_id = 0
         self._saved_id = 0
         self.cancel_transaction()
 
+    def _trim_undo(self) -> None:
+        while len(self._undo) > self.limit or (
+            len(self._undo) > 1 and self._undo_bytes > self.memory_limit_bytes
+        ):
+            state = self._undo.pop(0)
+            self._undo_bytes -= self._estimate_bytes(state.document)
+
     def _push_snapshot(self, document: Document) -> None:
         after_id = self._next_id
         self._next_id += 1
-        self._undo.append(HistoryState(document.copy(), self._current_id, after_id))
+        snapshot = document.copy()
+        self._undo.append(HistoryState(snapshot, self._current_id, after_id))
+        self._undo_bytes += self._estimate_bytes(snapshot)
         self._current_id = after_id
-        if len(self._undo) > self.limit:
-            del self._undo[: len(self._undo) - self.limit]
+        self._trim_undo()
         self._redo.clear()
+        self._redo_bytes = 0
 
     def push(self, document: Document) -> None:
         if self._transaction is None:
@@ -88,7 +107,11 @@ class History:
             return None
         self.cancel_transaction()
         state = self._undo.pop()
-        self._redo.append(HistoryState(current.copy(), self._current_id, state.after_id))
+        state_bytes = self._estimate_bytes(state.document)
+        self._undo_bytes -= state_bytes
+        current_copy = current.copy()
+        self._redo.append(HistoryState(current_copy, self._current_id, state.after_id))
+        self._redo_bytes += self._estimate_bytes(current_copy)
         self._current_id = state.state_id
         return state.document.copy()
 
@@ -97,9 +120,17 @@ class History:
             return None
         self.cancel_transaction()
         state = self._redo.pop()
-        self._undo.append(HistoryState(current.copy(), self._current_id, state.after_id))
+        self._redo_bytes -= self._estimate_bytes(state.document)
+        current_copy = current.copy()
+        self._undo.append(HistoryState(current_copy, self._current_id, state.after_id))
+        self._undo_bytes += self._estimate_bytes(current_copy)
+        self._trim_undo()
         self._current_id = state.after_id
         return state.document.copy()
+
+    @property
+    def memory_usage_bytes(self) -> int:
+        return self._undo_bytes + self._redo_bytes
 
     def __len__(self) -> int:
         return len(self._undo)
