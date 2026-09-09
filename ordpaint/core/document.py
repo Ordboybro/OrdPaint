@@ -190,11 +190,7 @@ class Document:
         return True
 
     def resize_canvas(self, width: int, height: int, anchor: str = "center") -> bool:
-        """Resize the canvas while preserving every layer and its pixels.
-
-        Anchor controls where existing pixels stay: top-left, top, top-right,
-        left, center, right, bottom-left, bottom, or bottom-right.
-        """
+        """Resize the canvas while preserving every layer and its pixels."""
         width = int(width)
         height = int(height)
         if width < 1 or height < 1 or (width == self.width and height == self.height):
@@ -228,20 +224,26 @@ class Document:
         self.touch()
         return True
 
-    def scale_image(self, width: int, height: int) -> bool:
-        """Scale the entire document and every layer to a new pixel size."""
+    def scale_image(
+        self,
+        width: int,
+        height: int,
+        transformation_mode: Qt.TransformationMode = Qt.TransformationMode.SmoothTransformation,
+    ) -> bool:
+        """Scale the entire document and every layer using the selected resampler."""
         width = int(width)
         height = int(height)
         if width < 1 or height < 1 or (width == self.width and height == self.height):
             return False
         if width * height > 100_000_000:
             raise ValueError("Image is too large")
+        mode = Qt.TransformationMode(transformation_mode)
         for layer in self.layers:
             layer.pixmap = layer.pixmap.scaled(
                 width,
                 height,
                 Qt.AspectRatioMode.IgnoreAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
+                mode,
             )
         self.width = width
         self.height = height
