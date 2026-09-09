@@ -6,10 +6,12 @@ from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QAction, QColor
 from PySide6.QtWidgets import QAbstractItemView, QMenu, QMessageBox
 
+from ordpaint.core.document import Document
 from ordpaint.core.session import SessionManager
 from ordpaint.core.ui_state import UIState
 from ordpaint.ui.layer_list import LayerListWidget
 from ordpaint.ui.main_window import MainWindow as BaseMainWindow
+from ordpaint.ui.new_document_dialog import NewDocumentDialog
 from ordpaint.ui.settings_store import SettingsStore
 
 
@@ -124,26 +126,18 @@ class MainWindow(BaseMainWindow):
         self.rotate_counterclockwise_action = QAction("Повернуть на 90° влево", self)
         self.rotate_counterclockwise_action.triggered.connect(self._rotate_transform_counterclockwise)
         menu = self.menuBar().addMenu("Трансформация")
-        menu.addActions(
-            [
-                self.begin_transform_action,
-                self.commit_transform_action,
-                self.cancel_transform_action,
-            ]
-        )
+        menu.addActions([self.begin_transform_action, self.commit_transform_action, self.cancel_transform_action])
         menu.addSeparator()
-        menu.addActions(
-            [
-                self.flip_horizontal_action,
-                self.flip_vertical_action,
-                self.rotate_clockwise_action,
-                self.rotate_counterclockwise_action,
-            ]
-        )
+        menu.addActions([
+            self.flip_horizontal_action,
+            self.flip_vertical_action,
+            self.rotate_clockwise_action,
+            self.rotate_counterclockwise_action,
+        ])
         self.canvas.transform_active_changed.connect(self._update_transform_actions)
         self._update_transform_actions(self.canvas.transform_active)
 
-    def _replace_document(self, document) -> None:
+    def _replace_document(self, document: Document) -> None:
         super()._replace_document(document)
         if hasattr(self, "begin_transform_action"):
             self.canvas.transform_active_changed.connect(self._update_transform_actions)
@@ -297,10 +291,28 @@ class MainWindow(BaseMainWindow):
             self.session.discard_recovery()
 
     def new_document(self) -> None:
-        super().new_document()
-        if not self.dirty and self.current_path is None:
-            self.session.set_project(None)
-            self.session.clear_recovery()
+        if not self._confirm_discard():
+            return
+        dialog = NewDocumentDialog(self, self.document.width, self.document.height)
+        if dialog.exec() != NewDocumentDialog.DialogCode.Accepted:
+            return
+        options = dialog.options()
+        try:
+            document = Document(options.width, options.height)
+        except ValueError as exc:
+            QMessageBox.warning(self, "Новый документ", str(exc))
+            return
+        if not options.transparent:
+            document.active_layer.pixmap.fill(QColor(options.background))
+            document.touch()
+        self.history.clear()
+        self.current_path = None
+        self.dirty = False
+        self._replace_document(document)
+        self.history.mark_saved()
+        self.session.set_project(None)
+        self.session.clear_recovery()
+        self._update_window_title()
 
     def open_project(self) -> None:
         before = self.current_path
