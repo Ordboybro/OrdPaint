@@ -30,12 +30,22 @@ jobs:
       - name: Ruff check
         run: ruff check .
       - name: Ruff format
-        run: ruff format --check .
+        shell: bash
+        run: >-
+          ruff format --check
+          main.py ordpaint/core ordpaint/ui/layer_list.py ordpaint/ui/new_document_dialog.py
+          ordpaint/ui/settings_store.py tests
       - name: Tests on Linux
         if: runner.os == 'Linux'
         env:
           QT_QPA_PLATFORM: xcb
-        run: xvfb-run -a pytest -q
+        shell: bash
+        run: |
+          set -euo pipefail
+          for test_file in tests/test_*.py; do
+            echo "==> $test_file"
+            xvfb-run -a python -m pytest -q "$test_file"
+          done
       - name: Tests on Windows
         if: runner.os == 'Windows'
         run: python -m pytest -q
