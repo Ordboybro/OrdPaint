@@ -2,21 +2,27 @@ from __future__ import annotations
 
 from collections import deque
 
-from PySide6.QtCore import QByteArray, Qt
-from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPixmap
+from PySide6.QtCore import QByteArray, QPointF, QRect, Qt
+from PySide6.QtGui import QAction, QBrush, QColor, QIcon, QPainter, QPen, QPixmap, QRadialGradient
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (
     QColorDialog,
     QDockWidget,
     QFormLayout,
     QGridLayout,
+    QHBoxLayout,
+    QLabel,
     QLineEdit,
     QPushButton,
+    QSlider,
     QSpinBox,
     QToolButton,
     QVBoxLayout,
     QWidget,
 )
+
+from ordpaint.core.raster import flood_fill
+from ordpaint.ui.canvas import Canvas
 
 
 _ICON_PATHS = {
@@ -48,6 +54,99 @@ def _icon(name: str) -> QIcon:
     return QIcon(pixmap)
 
 
+def _install_canvas_dynamics() -> None:
+    if getattr(Canvas, "_ordpaint_dynamics_installed", False):
+        return
+
+    def set_hardness(self, value: int) -> None:
+        self.brush_hardness = max(1, min(100, int(value)))
+        self.update()
+
+    def set_spacing(self, value: int) -> None:
+        self.brush_spacing = max(1, min(100, int(value)))
+        self.update()
+
+    def set_smoothness(self, value: int) -> None:
+        self.brush_smoothness = max(0, min(100, int(value)))
+        self.update()
+
+    def set_fill_tolerance(self, value: int) -> None:
+        self.fill_tolerance = max(0, min(255, int(value)))
+        self.update()
+
+    def draw_segment(self, start, end) -> None:
+        layer = self.document.active_layer
+        if layer.locked:
+            return
+        radius = max(0.5, self.brush_size / 2)
+        spacing = max(0.01, self.brush_spacing / 100)
+        smoothness = max(0, min(100, self.brush_smoothness)) / 100
+        step = max(1.0, radius * 2 * spacing * (1.0 - smoothness * 0.45))
+        dx = end.x() - start.x()
+        dy = end.y() - start.y()
+        distance = (dx * dx + dy * dy) ** 0.5
+        count = max(1, int(distance / step) + 1)
+        painter = QPainter(layer.pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        if self.selection.rect is not None:
+            painter.setClipRect(self.selection.rect)
+        erase = self.tool.value == "eraser"
+        if erase:
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear)
+        for index in range(count + 1):
+            t = min(1.0, index / max(1, count))
+            point = QPointF(start.x() + dx * t, start.y() + dy * t)
+            if self.brush_hardness >= 99:
+                color = QColor(self.color)
+                color.setAlpha(round(color.alpha() * self.opacity / 100))
+                painter.setBrush(QBrush(color))
+            else:
+                color = QColor(self.color)
+                color.setAlpha(round(color.alpha() * self.opacity / 100))
+                gradient = QRadialGradient(point, radius)
+                hard_stop = self.brush_hardness / 100
+                gradient.setColorAt(0.0, color)
+                gradient.setColorAt(hard_stop, color)
+                edge = QColor(color)
+                edge.setAlpha(0)
+                gradient.setColorAt(1.0, edge)
+                painter.setBrush(QBrush(gradient))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(point, radius, radius)
+        painter.end()
+        self.document.touch()
+        self.document_changed.emit()
+
+    def fill(self, point) -> None:
+        if flood_fill(
+            self.document.active_layer.pixmap,
+            point,
+            self._paint_color(),
+            tolerance=self.fill_tolerance,
+            clip=self.selection.rect,
+        ):
+            self.document.touch()
+            self.document_changed.emit()
+
+    original_init = Canvas.__init__
+
+    def init(self, *args, **kwargs) -> None:
+        original_init(self, *args, **kwargs)
+        self.brush_hardness = 100
+        self.brush_spacing = 20
+        self.brush_smoothness = 0
+        self.fill_tolerance = 0
+
+    Canvas.__init__ = init
+    Canvas.set_brush_hardness = set_hardness
+    Canvas.set_brush_spacing = set_spacing
+    Canvas.set_brush_smoothness = set_smoothness
+    Canvas.set_fill_tolerance = set_fill_tolerance
+    Canvas._draw_segment = draw_segment
+    Canvas._flood_fill = fill
+    Canvas._ordpaint_dynamics_installed = True
+
+
 class ColorStudio(QWidget):
     """Compact RGBA/HEX color panel with recent swatches."""
 
@@ -65,23 +164,16 @@ class ColorStudio(QWidget):
         layout.addWidget(self.preview)
         form = QFormLayout()
         self.hex_edit = QLineEdit()
-        self.hex_edit.setPlaceholderText("#RRGGBB or #RRGGBBAA")
+        self.hex_edit.setPlaceholderText("#RRGGBB or #AARRGGBB")
         self.hex_edit.returnPressed.connect(self._apply_hex)
         form.addRow("HEX", self.hex_edit)
-        self.r = QSpinBox()
-        self.r.setRange(0, 255)
-        self.g = QSpinBox()
-        self.g.setRange(0, 255)
-        self.b = QSpinBox()
-        self.b.setRange(0, 255)
-        self.a = QSpinBox()
-        self.a.setRange(0, 255)
+        self.r = QSpinBox(); self.r.setRange(0, 255)
+        self.g = QSpinBox(); self.g.setRange(0, 255)
+        self.b = QSpinBox(); self.b.setRange(0, 255)
+        self.a = QSpinBox(); self.a.setRange(0, 255)
         for box in (self.r, self.g, self.b, self.a):
             box.valueChanged.connect(self._apply_rgba)
-        form.addRow("R", self.r)
-        form.addRow("G", self.g)
-        form.addRow("B", self.b)
-        form.addRow("A", self.a)
+        form.addRow("R", self.r); form.addRow("G", self.g); form.addRow("B", self.b); form.addRow("A", self.a)
         layout.addLayout(form)
         self.swatches = QWidget()
         self.swatch_grid = QGridLayout(self.swatches)
@@ -94,14 +186,9 @@ class ColorStudio(QWidget):
     def sync(self, color: QColor) -> None:
         color = QColor(color)
         self._syncing = True
-        self.r.setValue(color.red())
-        self.g.setValue(color.green())
-        self.b.setValue(color.blue())
-        self.a.setValue(color.alpha())
+        self.r.setValue(color.red()); self.g.setValue(color.green()); self.b.setValue(color.blue()); self.a.setValue(color.alpha())
         self.hex_edit.setText(color.name(QColor.NameFormat.HexArgb).upper())
-        self.preview.setStyleSheet(
-            f"background: rgba({color.red()},{color.green()},{color.blue()},{color.alpha() / 255:.3f});"
-        )
+        self.preview.setStyleSheet(f"background: rgba({color.red()},{color.green()},{color.blue()},{color.alpha() / 255:.3f});")
         self._syncing = False
 
     def _choose(self) -> None:
@@ -140,32 +227,50 @@ class ColorStudio(QWidget):
             self.swatch_grid.addWidget(button, index // 4, index % 4)
 
 
+def _add_brush_controls(window) -> None:
+    dock = QDockWidget("Кисть", window)
+    dock.setObjectName("brushSettingsDock")
+    panel = QWidget()
+    layout = QVBoxLayout(panel)
+    layout.setContentsMargins(10, 10, 10, 10)
+    controls = (
+        ("Жёсткость", "brush_hardness", 1, 100, 100),
+        ("Интервал", "brush_spacing", 1, 100, 20),
+        ("Сглаживание", "brush_smoothness", 0, 100, 0),
+        ("Допуск заливки", "fill_tolerance", 0, 255, 0),
+    )
+    for label, attr, minimum, maximum, value in controls:
+        row = QHBoxLayout()
+        row.addWidget(QLabel(label))
+        slider = QSlider(Qt.Orientation.Horizontal)
+        slider.setRange(minimum, maximum)
+        slider.setValue(getattr(window.canvas, attr, value))
+        value_label = QLabel(str(slider.value()))
+        row.addWidget(slider, 1)
+        row.addWidget(value_label)
+        setter = getattr(window.canvas, f"set_{attr}")
+        slider.valueChanged.connect(setter)
+        slider.valueChanged.connect(value_label.setNum)
+        layout.addLayout(row)
+    layout.addStretch(1)
+    dock.setWidget(panel)
+    window.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, dock)
+
+
 def install(window) -> None:
+    _install_canvas_dynamics()
+    for attr in ("brush_hardness", "brush_spacing", "brush_smoothness", "fill_tolerance"):
+        if not hasattr(window.canvas, attr):
+            setattr(window.canvas, attr, {"brush_hardness": 100, "brush_spacing": 20, "brush_smoothness": 0, "fill_tolerance": 0}[attr])
     window.setWindowIcon(_icon("brush"))
     if hasattr(window, "grid_action"):
         window.grid_action.setShortcut("Ctrl+G")
         window.grid_action.setToolTip("Сетка (Ctrl+G)")
-    for attr, name in {
-        "new_action": "brush",
-        "open_action": "select",
-        "save_action": "fill",
-        "export_action": "select",
-        "undo_action": "undo",
-        "redo_action": "redo",
-    }.items():
+    for attr, name in {"new_action": "brush", "open_action": "select", "save_action": "fill", "export_action": "select", "undo_action": "undo", "redo_action": "redo"}.items():
         action = getattr(window, attr, None)
         if action is not None:
             action.setIcon(_icon(name))
-    tool_icons = {
-        "Кисть": "brush",
-        "Ластик": "eraser",
-        "Линия": "line",
-        "Прямоугольник": "rectangle",
-        "Эллипс": "ellipse",
-        "Заливка": "fill",
-        "Пипетка": "eyedropper",
-        "Выделение": "select",
-    }
+    tool_icons = {"Кисть": "brush", "Ластик": "eraser", "Линия": "line", "Прямоугольник": "rectangle", "Эллипс": "ellipse", "Заливка": "fill", "Пипетка": "eyedropper", "Выделение": "select"}
     for button in window.findChildren(QToolButton):
         if button.objectName() != "toolPaletteButton":
             continue
@@ -176,6 +281,7 @@ def install(window) -> None:
             button.setText("")
             button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
             button.setToolTip(f"{action.text()}  •  {action.shortcut().toString()}")
+    _add_brush_controls(window)
     dock = QDockWidget("Цвет", window)
     dock.setObjectName("colorStudioDock")
     dock.setAllowedAreas(Qt.DockWidgetArea.RightDockWidgetArea | Qt.DockWidgetArea.LeftDockWidgetArea)
