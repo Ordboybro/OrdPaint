@@ -12,35 +12,39 @@ def test_load_rejects_oversized_project(tmp_path: Path, monkeypatch: pytest.Monk
     path = tmp_path / "large.ordpaint"
     path.write_bytes(b"x" * 32)
     monkeypatch.setattr("ordpaint.core.project.MAX_PROJECT_BYTES", 16)
-
-    with pytest.raises(ProjectError, match="too large"):
+    with pytest.raises(ProjectError, match="слишком большой"):
         load_project(path)
 
 
 def test_load_rejects_invalid_utf8(tmp_path: Path) -> None:
     path = tmp_path / "broken.ordpaint"
     path.write_bytes(b"\xff\xfe\xfd")
-
-    with pytest.raises(ProjectError, match="Could not read project"):
+    with pytest.raises(ProjectError, match="Не удалось прочитать проект"):
         load_project(path)
 
 
 def test_load_rejects_excessive_total_layer_pixels(tmp_path: Path) -> None:
     width = 10_000
     height = 10_000
-    payload = {
-        "format": "ordpaint",
-        "version": 1,
-        "width": width,
-        "height": height,
-        "active_index": 0,
-        "layers": [{"image": ""}, {"image": ""}],
-    }
+    payload = {"format": "ordpaint", "version": 1, "width": width, "height": height, "active_index": 0, "layers": [{"image": ""}, {"image": ""}]}
     path = tmp_path / "too-many-pixels.ordpaint"
     path.write_text(json.dumps(payload), encoding="utf-8")
-
     assert width * height * 2 > MAX_TOTAL_LAYER_PIXELS
-    with pytest.raises(ProjectError, match="too many layer pixels"):
+    with pytest.raises(ProjectError, match="слишком много"):
+        load_project(path)
+
+
+def test_load_rejects_wrong_version(tmp_path: Path) -> None:
+    path = tmp_path / "version.ordpaint"
+    path.write_text(json.dumps({"format": "ordpaint", "version": 999}), encoding="utf-8")
+    with pytest.raises(ProjectError, match="не поддерживается"):
+        load_project(path)
+
+
+def test_load_rejects_wrong_format(tmp_path: Path) -> None:
+    path = tmp_path / "format.ordpaint"
+    path.write_text(json.dumps({"format": "other", "version": 1}), encoding="utf-8")
+    with pytest.raises(ProjectError, match="не файл проекта"):
         load_project(path)
 
 
@@ -51,10 +55,8 @@ def test_save_and_load_round_trip(tmp_path: Path, qt_app) -> None:
     document.active_layer.pixmap = pixmap
     document.touch()
     path = tmp_path / "roundtrip.ordpaint"
-
     save_project(document, path)
     restored = load_project(path)
-
     assert restored.width == 32
     assert restored.height == 24
     assert len(restored.layers) == 1
@@ -66,8 +68,7 @@ def test_save_rejects_payload_over_limit(tmp_path: Path, monkeypatch: pytest.Mon
     document = Document(16, 16)
     path = tmp_path / "too-large.ordpaint"
     monkeypatch.setattr("ordpaint.core.project.MAX_PROJECT_BYTES", 1)
-
-    with pytest.raises(ProjectError, match="too large"):
+    with pytest.raises(ProjectError, match="слишком большой"):
         save_project(document, path)
 
 
