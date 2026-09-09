@@ -4,6 +4,7 @@ from PySide6.QtWidgets import QApplication
 
 from ordpaint.ui.application_window import MainWindow
 from ordpaint.ui.polish import install as install_polish
+from ordpaint.ui.resize_integration import install as install_resize
 
 
 def main() -> int:
@@ -16,6 +17,7 @@ def main() -> int:
 
     window = MainWindow()
     install_polish(window)
+    install_resize(window)
     window.show()
 
     return app.exec()
