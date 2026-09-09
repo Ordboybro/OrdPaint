@@ -8,6 +8,7 @@ from ordpaint.ui.brush_presets import BrushPresetDock
 from ordpaint.ui.color_lab import ColorLabDock
 from ordpaint.ui.crash_reporter import install as install_crash_reporter
 from ordpaint.ui.grid_enhancement import install as install_grid_enhancement
+from ordpaint.ui.grid_ux import install as install_grid_ux
 from ordpaint.ui.keyboard_polish import install as install_keyboard_polish
 from ordpaint.ui.layout_restore import install as install_layout_restore
 from ordpaint.ui.polish import install as install_polish
@@ -24,8 +25,10 @@ def main() -> int:
     app.setStyle("Fusion")
     install_crash_reporter()
     install_grid_enhancement()
+    install_grid_ux_class = install_grid_ux
 
     window = MainWindow()
+    install_grid_ux_class(window)
     install_polish(window)
     install_resize(window)
     install_transform(window)
