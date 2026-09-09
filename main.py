@@ -3,6 +3,7 @@ import sys
 from PySide6.QtWidgets import QApplication
 
 from ordpaint.ui.application_window import MainWindow
+from ordpaint.ui.polish import install as install_polish
 
 
 def main() -> int:
@@ -14,6 +15,7 @@ def main() -> int:
     app.setStyle("Fusion")
 
     window = MainWindow()
+    install_polish(window)
     window.show()
 
     return app.exec()
