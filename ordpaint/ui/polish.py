@@ -123,11 +123,16 @@ def _install_canvas_dynamics() -> None:
         self.document.touch()
         self.document_changed.emit()
 
-    def fill(point) -> None:
+    def fill(self, point) -> None:
+        layer = self.document.active_layer
+        if layer.locked:
+            return
+        color = QColor(self.color)
+        color.setAlpha(round(color.alpha() * self.opacity / 100))
         if flood_fill(
-            self.document.active_layer.pixmap,
+            layer.pixmap,
             point,
-            self._paint_color(),
+            color,
             tolerance=self.fill_tolerance,
             clip=self.selection.rect,
         ):
