@@ -62,13 +62,20 @@ class ColorStudio(QWidget):
         self.hex_edit.setPlaceholderText("#RRGGBB or #RRGGBBAA")
         self.hex_edit.returnPressed.connect(self._apply_hex)
         form.addRow("HEX", self.hex_edit)
-        self.r = QSpinBox(); self.r.setRange(0, 255)
-        self.g = QSpinBox(); self.g.setRange(0, 255)
-        self.b = QSpinBox(); self.b.setRange(0, 255)
-        self.a = QSpinBox(); self.a.setRange(0, 255)
+        self.r = QSpinBox()
+        self.r.setRange(0, 255)
+        self.g = QSpinBox()
+        self.g.setRange(0, 255)
+        self.b = QSpinBox()
+        self.b.setRange(0, 255)
+        self.a = QSpinBox()
+        self.a.setRange(0, 255)
         for box in (self.r, self.g, self.b, self.a):
             box.valueChanged.connect(self._apply_rgba)
-        form.addRow("R", self.r); form.addRow("G", self.g); form.addRow("B", self.b); form.addRow("A", self.a)
+        form.addRow("R", self.r)
+        form.addRow("G", self.g)
+        form.addRow("B", self.b)
+        form.addRow("A", self.a)
         layout.addLayout(form)
         self.swatches = QWidget()
         self.swatch_grid = QGridLayout(self.swatches)
@@ -81,7 +88,10 @@ class ColorStudio(QWidget):
     def sync(self, color: QColor) -> None:
         color = QColor(color)
         self._syncing = True
-        self.r.setValue(color.red()); self.g.setValue(color.green()); self.b.setValue(color.blue()); self.a.setValue(color.alpha())
+        self.r.setValue(color.red())
+        self.g.setValue(color.green())
+        self.b.setValue(color.blue())
+        self.a.setValue(color.alpha())
         self.hex_edit.setText(color.name(QColor.NameFormat.HexArgb).upper())
         self.preview.setStyleSheet(
             f"background: rgba({color.red()},{color.green()},{color.blue()},{color.alpha() / 255:.3f});"
