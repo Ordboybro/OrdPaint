@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QLabel, QSpinBox, QVBoxLayout
+from PySide6.QtWidgets import QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QLabel, QSpinBox, QVBoxLayout
 
 
 @dataclass(frozen=True)
@@ -82,10 +81,9 @@ class NewDocumentDialog(QDialog):
         form.addRow("Якорь", self.anchor_combo)
         root.addLayout(form)
 
-        size_hint = QLabel()
-        size_hint.setStyleSheet("color: #8f96a3;")
-        root.addWidget(size_hint)
-        self._size_hint = size_hint
+        self._size_hint = QLabel()
+        self._size_hint.setStyleSheet("color: #8f96a3;")
+        root.addWidget(self._size_hint)
         self._update_size_hint()
         self.width_spin.valueChanged.connect(self._update_size_hint)
         self.height_spin.valueChanged.connect(self._update_size_hint)
