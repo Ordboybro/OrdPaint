@@ -1,22 +1,21 @@
 # OrdPaint
 
-**OrdPaint** — desktop raster graphics editor built with Python 3 and PySide6 / Qt 6.
+**OrdPaint** — desktop raster graphics editor built with Python 3.12+ and PySide6 / Qt 6.
 
-The project is designed as a real portfolio-grade application rather than a single-file Paint clone: document state is isolated in `core`, Qt is kept in `ui`, editing operations are undoable, and quality is checked automatically with Ruff and pytest.
+The project is designed as a portfolio-grade application rather than a single-file Paint clone: document state is isolated in `core`, Qt interaction is kept in `ui`, editing operations are undoable, projects are validated and saved atomically, and quality is checked automatically with Ruff and pytest.
 
 ## Features
 
 ### Canvas & drawing
-- brush and eraser;
+- brush and eraser with size, opacity, hardness, spacing and smoothing controls;
 - line, rectangle and ellipse tools;
-- flood fill with tolerance;
+- flood fill with configurable tolerance;
 - eyedropper;
-- configurable brush size and opacity;
 - transparent checkerboard canvas;
-- zoom and pan;
-- optional rulers and grid;
-- cursor position feedback;
-- smooth previews for shape drawing and transform operations.
+- zoom around cursor, Ctrl+wheel zoom and pan with Space+LMB or middle mouse;
+- rulers and configurable grid;
+- cursor coordinates and canvas boundary feedback;
+- live previews for shape drawing and transforms.
 
 ### Selection & transform
 - rectangular selection;
@@ -36,8 +35,7 @@ The project is designed as a real portfolio-grade application rather than a sing
 - create, duplicate and delete;
 - rename with unique names;
 - drag & drop reordering;
-- visibility and locking;
-- opacity with history transaction support;
+- visibility, locking and opacity;
 - blend modes;
 - merge down and merge visible;
 - generated thumbnails;
@@ -45,18 +43,25 @@ The project is designed as a real portfolio-grade application rather than a sing
 
 ### Projects & reliability
 - native `.ordpaint` project format;
-- versioned project schema;
-- atomic project saving;
+- versioned schema and defensive validation;
+- atomic project saving with filesystem sync;
 - import PNG / JPEG / WebP / BMP;
 - export PNG / JPEG / WebP / BMP;
 - dirty-state tracking;
-- Undo / Redo;
-- recent projects;
-- persistent Qt UI settings;
-- autosave;
-- crash-recovery draft support;
-- safe handling of invalid recovery data;
-- bounded project and layer resource limits to reject pathological files safely.
+- bounded Undo / Redo with transaction support and a memory budget;
+- recent projects and persistent UI state;
+- autosave and crash-recovery drafts;
+- persistent crash diagnostics at `~/.ordpaint/crash.log`;
+- bounded project and layer resource limits to reject pathological files safely;
+- resize-canvas anchors and image scaling with selectable resampling.
+
+### Editor chrome
+- dark charcoal workspace with warm orange accent;
+- vector SVG-style tool icons instead of Unicode pseudo-icons;
+- dedicated color studio with HEX/RGBA editing and recent swatches;
+- dedicated brush settings panel;
+- grid settings dialog;
+- persistent docks and editor state.
 
 ## Architecture
 
@@ -82,10 +87,16 @@ ordpaint/
     ├── layer_list.py
     ├── settings_store.py
     ├── application_window.py
-    └── main_window.py
+    ├── main_window.py
+    ├── new_document_dialog.py
+    ├── resize_dialog.py
+    ├── resize_integration.py
+    ├── grid_settings_dialog.py
+    ├── polish.py
+    └── crash_reporter.py
 ```
 
-The main architectural rule is simple: **core owns document state and editing operations; UI owns Qt interaction and presentation**. History snapshots are created before mutations, while high-frequency UI changes such as sliders use transactions so one user gesture becomes one undo step.
+The architectural rule is simple: **core owns document state and editing operations; UI owns Qt interaction and presentation**. History snapshots are created before mutations, while high-frequency UI changes are grouped into transactions. Large histories are also constrained by a memory budget.
 
 ## Installation
 
@@ -100,7 +111,7 @@ python -m venv .venv
 # Linux/macOS
 source .venv/bin/activate
 
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 python main.py
 ```
 
@@ -112,7 +123,7 @@ ruff format --check .
 pytest -q
 ```
 
-CI runs the linter, formatter and test suite on every push and pull request. Linux CI installs the required Qt runtime libraries and runs the widget tests under Xvfb for a real virtual X display. The Windows release workflow compiles, tests and packages the application with PyInstaller.
+CI runs compile checks, Ruff and the regression suite on every push and pull request. Linux widget tests are isolated per test file under Xvfb to prevent Qt process-lifetime failures from contaminating unrelated tests. Windows runs the full suite natively, and the release workflow builds a Windows PyInstaller package.
 
 ## Hotkeys
 
@@ -138,9 +149,10 @@ CI runs the linter, formatter and test suite on every push and pull request. Lin
 | `Ctrl+S` | Save |
 | `Ctrl+O` | Open |
 | `Ctrl+N` | New |
+| `Ctrl+G` | Grid |
 | `Ctrl+0` | 100% zoom |
 | `Ctrl+Shift+0` | Fit to window |
-| `Ctrl+mouse wheel` | Zoom |
+| `Ctrl+mouse wheel` | Zoom around cursor |
 | `Space + LMB` | Pan |
 | `Middle mouse` | Pan |
 
@@ -150,7 +162,7 @@ OrdPaint uses a dark, compact editor layout with warm orange accents, a dedicate
 
 ## Status
 
-OrdPaint is in final stabilization. The editor workflow, project format, layer system, selection/transform workflow, persistence services, automated regression suite, and Windows packaging pipeline are implemented. The remaining release gate is real desktop QA: run the application on Windows, exercise the major tools against the reference layout, and verify the packaged executable on the target machine.
+OrdPaint is in release-candidate stabilization. The core editor workflow, project format, layer system, selection/transform workflow, persistence services, defensive resource limits, automated regression suite, and Windows packaging pipeline are implemented. Final release work is desktop QA against the visual reference, packaged-executable smoke testing, and verification on a clean Windows machine.
 
 ## License
 
