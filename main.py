@@ -1,5 +1,6 @@
 import sys
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
 from ordpaint.ui.application_window import MainWindow
@@ -31,10 +32,9 @@ def main() -> int:
     install_keyboard_polish(window)
 
     window.brush_presets_dock = BrushPresetDock(window)
-    window.addDockWidget(window.brush_presets_dock.allowedAreas() & window.brush_presets_dock.allowedAreas() or 1, window.brush_presets_dock)
+    window.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, window.brush_presets_dock)
     window.color_lab_dock = ColorLabDock(window)
-    window.addDockWidget(window.color_lab_dock.allowedAreas() & window.color_lab_dock.allowedAreas() or 2, window.color_lab_dock)
-    window.canvas.color_picked.connect(window.color_lab_dock._set_color)
+    window.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, window.color_lab_dock)
 
     install_layout_restore(window)
     window.show()
