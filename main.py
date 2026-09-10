@@ -19,6 +19,7 @@ from ordpaint.ui.recovery_polish import install as install_recovery_polish
 from ordpaint.ui.resize_integration import install as install_resize
 from ordpaint.ui.selection_advanced import install as install_selection_advanced
 from ordpaint.ui.selection_clip import install as install_selection_clip
+from ordpaint.ui.stability import install as install_stability
 from ordpaint.ui.transform_advanced import install as install_transform_advanced
 from ordpaint.ui.transform_integration import install as install_transform
 
@@ -32,6 +33,7 @@ def main() -> int:
     app.setStyle("Fusion")
     install_crash_reporter()
     install_grid_enhancement()
+    install_stability()
 
     window = MainWindow()
     install_grid_ux(window)
