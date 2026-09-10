@@ -14,6 +14,7 @@ concurrency:
 
 jobs:
   quality:
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -63,7 +64,7 @@ jobs:
           set -euo pipefail
           for test_file in tests/test_*.py; do
             echo "==> $test_file"
-            xvfb-run -a -s '-screen 0 1280x1024x24' python -m pytest -q "$test_file"
+            timeout --signal=TERM 90s xvfb-run -a -s '-screen 0 1280x1024x24' python -m pytest -q "$test_file"
           done
       - name: Upload runtime smoke screenshot
         if: runner.os == 'Linux' && always()
