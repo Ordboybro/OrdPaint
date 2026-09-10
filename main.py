@@ -15,6 +15,7 @@ from ordpaint.ui.polish import install as install_polish
 from ordpaint.ui.pressure_input import install as install_pressure_input
 from ordpaint.ui.recovery_polish import install as install_recovery_polish
 from ordpaint.ui.resize_integration import install as install_resize
+from ordpaint.ui.selection_advanced import install as install_selection_advanced
 from ordpaint.ui.transform_advanced import install as install_transform_advanced
 from ordpaint.ui.transform_integration import install as install_transform
 
@@ -28,15 +29,16 @@ def main() -> int:
     app.setStyle("Fusion")
     install_crash_reporter()
     install_grid_enhancement()
-    install_grid_ux_class = install_grid_ux
+    install_grid_ux(window=None)
 
     window = MainWindow()
-    install_grid_ux_class(window)
+    install_grid_ux(window)
     install_polish(window)
     install_pressure_input()
     install_resize(window)
     install_transform(window)
     install_transform_advanced(window)
+    install_selection_advanced(window)
     install_keyboard_polish(window)
     install_recovery_polish(window)
 
