@@ -2,10 +2,15 @@ name: quality
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 permissions:
   contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   quality:
@@ -35,7 +40,7 @@ jobs:
           ruff format --check
           main.py ordpaint/core ordpaint/ui/layer_list.py ordpaint/ui/new_document_dialog.py
           ordpaint/ui/settings_store.py ordpaint/ui/polish.py ordpaint/ui/grid_settings_dialog.py
-          ordpaint/ui/resize_integration.py tests
+          ordpaint/ui/resize_integration.py tests benchmarks
       - name: Tests on Linux
         if: runner.os == 'Linux'
         env:
