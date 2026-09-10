@@ -9,7 +9,7 @@ from ordpaint.ui.canvas import Canvas
 
 
 def install(window) -> None:
-    """Install ellipse/polygon/lasso selection modes without replacing the canvas."""
+    """Install ellipse/polygon/lasso/crop selection modes without replacing the canvas."""
     if getattr(window, "_ordpaint_selection_advanced", False):
         return
     window.canvas.selection.set_document_size(window.document.width, window.document.height)
@@ -51,6 +51,16 @@ def install(window) -> None:
         mode_group.addAction(action)
         if mode is SelectionMode.REPLACE:
             action.setChecked(True)
+
+    window.tool_actions.update(
+        {
+            Tool.SELECT_RECT: actions["rect"],
+            Tool.SELECT_ELLIPSE: actions["ellipse"],
+            Tool.SELECT_POLYGON: actions["polygon"],
+            Tool.SELECT_LASSO: actions["lasso"],
+            Tool.CROP: actions["crop"],
+        }
+    )
 
     original_press = Canvas.mousePressEvent
     original_move = Canvas.mouseMoveEvent
