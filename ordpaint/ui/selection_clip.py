@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QPoint, QRect
-from PySide6.QtGui import QColor, QGuiApplication, QImage, QPixmap
+from PySide6.QtGui import QColor, QGuiApplication, QImage, QPainter, QPixmap
 
 from ordpaint.ui.canvas import Canvas
 
@@ -12,24 +12,25 @@ def _blend_pixel(before: QColor, after: QColor, coverage: int) -> QColor:
     if coverage <= 0:
         return before
     a = coverage / 255.0
-    return QColor(
-        round(before.red() * (1.0 - a) + after.red() * a),
-        round(before.green() * (1.0 - a) + after.green() * a),
-        round(before.blue() * (1.0 - a) + after.blue() * a),
-        round(before.alpha() * (1.0 - a) + after.alpha() * a),
-    )
+    return QColor(round(before.red() * (1.0 - a) + after.red() * a), round(before.green() * (1.0 - a) + after.green() * a), round(before.blue() * (1.0 - a) + after.blue() * a), round(before.alpha() * (1.0 - a) + after.alpha() * a))
 
 
-def _mask_changed(before: QPixmap, after: QPixmap, canvas: Canvas) -> QPixmap:
+def _stroke_rect(canvas: Canvas, start, end) -> QRect:
+    radius = max(2, int(getattr(canvas, "brush_size", 1) * 0.5) + 2)
+    left = min(start.x(), end.x()) - radius
+    top = min(start.y(), end.y()) - radius
+    right = max(start.x(), end.x()) + radius
+    bottom = max(start.y(), end.y()) + radius
+    return QRect(left, top, right - left + 1, bottom - top + 1).intersected(QRect(0, 0, canvas.document.width, canvas.document.height))
+
+
+def _mask_region(before: QPixmap, after: QPixmap, canvas: Canvas, rect: QRect) -> QPixmap:
     selection = canvas.selection
-    rect = selection.bounding_rect().intersected(QRect(0, 0, after.width(), after.height()))
-    if rect.isEmpty():
-        return before
     before_image = before.toImage().convertToFormat(QImage.Format.Format_ARGB32)
     after_image = after.toImage().convertToFormat(QImage.Format.Format_ARGB32)
-    for y in range(rect.top(), rect.bottom() + 1):
-        for x in range(rect.left(), rect.right() + 1):
-            coverage = selection.coverage(QPoint(x, y))
+    for y in range(rect.height()):
+        for x in range(rect.width()):
+            coverage = selection.coverage(QPoint(rect.x() + x, rect.y() + y))
             if coverage != 255:
                 after_image.setPixelColor(x, y, _blend_pixel(before_image.pixelColor(x, y), after_image.pixelColor(x, y), coverage))
     return QPixmap.fromImage(after_image)
@@ -46,9 +47,17 @@ def install() -> None:
         if not self.selection.active:
             original_draw_segment(self, start, end)
             return
-        before = QPixmap(self.document.active_layer.pixmap)
+        rect = _stroke_rect(self, start, end)
+        if rect.isEmpty():
+            return
+        layer = self.document.active_layer
+        before = layer.pixmap.copy(rect)
         original_draw_segment(self, start, end)
-        self.document.active_layer.pixmap = _mask_changed(before, self.document.active_layer.pixmap, self)
+        after = layer.pixmap.copy(rect)
+        masked = _mask_region(before, after, self, rect)
+        painter = QPainter(layer.pixmap)
+        painter.drawPixmap(rect.topLeft(), masked)
+        painter.end()
         self.document.touch()
         self.document_changed.emit()
 
@@ -62,13 +71,13 @@ def install() -> None:
         if rect.isEmpty():
             return False
         image = layer.pixmap.toImage().convertToFormat(QImage.Format.Format_ARGB32)
-        for y in range(rect.top(), rect.bottom() + 1):
-            for x in range(rect.left(), rect.right() + 1):
-                coverage = self.selection.coverage(QPoint(x, y))
+        for y in range(rect.height()):
+            for x in range(rect.width()):
+                coverage = self.selection.coverage(QPoint(rect.x() + x, rect.y() + y))
                 if coverage:
-                    pixel = image.pixelColor(x, y)
+                    pixel = image.pixelColor(rect.x() + x, rect.y() + y)
                     pixel.setAlpha(round(pixel.alpha() * (1.0 - coverage / 255.0)))
-                    image.setPixelColor(x, y, pixel)
+                    image.setPixelColor(rect.x() + x, rect.y() + y, pixel)
         self.action_started.emit()
         layer.pixmap = QPixmap.fromImage(image)
         self.document.touch()
