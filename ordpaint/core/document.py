@@ -26,12 +26,17 @@ class Document:
         if self.width < 1 or self.height < 1:
             raise ValueError("Document dimensions must be positive")
         if not self.layers:
-            self.add_layer("Layer 1")
-        self.active_index = max(0, min(self.active_index, len(self.layers) - 1))
+            self.layers = [self._new_layer("Layer 1")]
+        old_active = self.layers[max(0, min(self.active_index, len(self.layers) - 1))]
         if self.layer_tree is None:
             self.layer_tree = LayerTree(children=list(self.layers))
-        else:
-            self._normalize_tree()
+        self._normalize_tree()
+        self._sync_layers_from_tree(preferred_active=old_active)
+
+    def _new_layer(self, name: str) -> Layer:
+        pixmap = QPixmap(self.width, self.height)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        return Layer(name, pixmap)
 
     def _normalize_tree(self) -> None:
         assert self.layer_tree is not None
@@ -43,8 +48,7 @@ class Document:
             for node in nodes:
                 if isinstance(node, LayerGroup):
                     node.children = clean_nodes(node.children)
-                    if node.children:
-                        result.append(node)
+                    result.append(node)
                 elif id(node) in valid and id(node) not in seen:
                     seen.add(id(node))
                     result.append(node)
@@ -55,6 +59,23 @@ class Document:
             if id(layer) not in seen:
                 self.layer_tree.children.append(layer)
                 seen.add(id(layer))
+
+    def _sync_layers_from_tree(self, preferred_active: Layer | None = None) -> None:
+        assert self.layer_tree is not None
+        flattened = list(self.layer_tree.iter_layers())
+        if not flattened:
+            raise ValueError("Layer tree must contain at least one layer")
+        self.layers = flattened
+        if preferred_active is not None and preferred_active in self.layers:
+            self.active_index = self.layers.index(preferred_active)
+        else:
+            self.active_index = max(0, min(self.active_index, len(self.layers) - 1))
+
+    def sync_tree_from_layers(self) -> None:
+        """Rebuild only the flat root structure when importing legacy flat data."""
+        assert self.layer_tree is not None
+        self.layer_tree.children = list(self.layers)
+        self._sync_layers_from_tree(preferred_active=self.active_layer)
 
     @property
     def active_layer(self) -> Layer:
@@ -72,39 +93,43 @@ class Document:
         return Document(self.width, self.height, copied_layers, self.active_index, copied_tree)
 
     def add_layer(self, name: str | None = None, index: int | None = None) -> Layer:
-        pixmap = QPixmap(self.width, self.height)
-        pixmap.fill(Qt.GlobalColor.transparent)
-        layer = Layer(self.unique_name(name or f"Layer {len(self.layers) + 1}"), pixmap)
+        assert self.layer_tree is not None
+        layer = self._new_layer(self.unique_name(name or f"Layer {len(self.layers) + 1}"))
+        root_layers = [node for node in self.layer_tree.children if isinstance(node, Layer)]
         if index is None:
             index = len(self.layers)
-        index = max(0, min(index, len(self.layers)))
-        self.layers.insert(index, layer)
-        if self.layer_tree is not None:
-            self.layer_tree.children.append(layer)
-        self.active_index = index
+        root_index = max(0, min(index, len(root_layers)))
+        if root_index >= len(root_layers):
+            self.layer_tree.add_layer(layer)
+        else:
+            target = root_layers[root_index]
+            position = self.layer_tree.children.index(target)
+            self.layer_tree.add_layer(layer, index=position)
+        self._sync_layers_from_tree(preferred_active=layer)
         self.touch()
         return layer
 
     def duplicate_active_layer(self) -> Layer:
-        duplicate = self.active_layer.copy()
-        duplicate.name = self.unique_name(f"{duplicate.name} copy")
-        self.layers.insert(self.active_index + 1, duplicate)
         assert self.layer_tree is not None
-        parent = self.layer_tree.parent_of(self.active_layer)
+        source = self.active_layer
+        duplicate = source.copy()
+        duplicate.name = self.unique_name(f"{duplicate.name} copy")
+        parent = self.layer_tree.parent_of(source)
         siblings = parent.children if parent is not None else self.layer_tree.children
-        pos = siblings.index(self.active_layer) + 1
-        siblings.insert(pos, duplicate)
-        self.active_index += 1
+        position = siblings.index(source) + 1
+        siblings.insert(position, duplicate)
+        self._sync_layers_from_tree(preferred_active=duplicate)
         self.touch()
         return duplicate
 
     def remove_active_layer(self) -> bool:
         if len(self.layers) <= 1:
             return False
-        layer = self.layers.pop(self.active_index)
-        if self.layer_tree is not None:
-            self.layer_tree.detach(layer)
-        self.active_index = min(self.active_index, len(self.layers) - 1)
+        assert self.layer_tree is not None
+        removed = self.active_layer
+        if not self.layer_tree.detach(removed):
+            return False
+        self._sync_layers_from_tree()
         self.touch()
         return True
 
@@ -165,24 +190,22 @@ class Document:
     def move_layer(self, source: int, target: int) -> bool:
         if not 0 <= source < len(self.layers) or not 0 <= target < len(self.layers) or source == target:
             return False
-        layer = self.layers.pop(source)
-        self.layers.insert(target, layer)
         assert self.layer_tree is not None
+        layer = self.layers[source]
         parent = self.layer_tree.parent_of(layer)
-        if parent is None:
-            self.layer_tree.children = [item for item in self.layer_tree.children if item is not layer]
-            root_layers = [item for item in self.layer_tree.children if isinstance(item, Layer)]
-            root_pos = min(target, len(root_layers))
-            insert_at = len(self.layer_tree.children)
-            seen_layers = 0
-            for i, item in enumerate(self.layer_tree.children):
-                if isinstance(item, Layer):
-                    if seen_layers >= root_pos:
-                        insert_at = i
-                        break
-                    seen_layers += 1
-            self.layer_tree.children.insert(insert_at, layer)
-        self.active_index = target
+        siblings = parent.children if parent is not None else self.layer_tree.children
+        sibling_indices = [i for i, node in enumerate(siblings) if isinstance(node, Layer)]
+        try:
+            old_sibling_index = next(i for i, node in enumerate(siblings) if node is layer)
+        except StopIteration:
+            return False
+        target_sibling_index = max(0, min(len(sibling_indices) - 1, sibling_indices.index(old_sibling_index) + (target - source)))
+        target_position = sibling_indices[target_sibling_index]
+        node = siblings.pop(old_sibling_index)
+        if target_position > old_sibling_index:
+            target_position -= 1
+        siblings.insert(target_position, node)
+        self._sync_layers_from_tree(preferred_active=layer)
         self.touch()
         return True
 
@@ -196,12 +219,14 @@ class Document:
         assert self.layer_tree is not None
         if not self.layer_tree.detach(group):
             return False
+        self._sync_layers_from_tree()
         self.touch()
         return True
 
     def move_node(self, node: Layer | LayerGroup, parent: LayerGroup | None, index: int | None = None) -> bool:
         assert self.layer_tree is not None
         self.layer_tree.move(node, parent, index)
+        self._sync_layers_from_tree(preferred_active=node if isinstance(node, Layer) else self.active_layer)
         self.touch()
         return True
 
@@ -213,8 +238,14 @@ class Document:
     def merge_active_down(self) -> bool:
         if self.active_index <= 0:
             return False
-        lower = self.layers[self.active_index - 1]
+        assert self.layer_tree is not None
         upper = self.active_layer
+        parent = self.layer_tree.parent_of(upper)
+        siblings = parent.children if parent is not None else self.layer_tree.children
+        position = siblings.index(upper)
+        if position <= 0 or not isinstance(siblings[position - 1], Layer):
+            return False
+        lower = siblings[position - 1]
         if lower.locked:
             return False
         painter = QPainter(lower.pixmap)
@@ -222,10 +253,8 @@ class Document:
         painter.setCompositionMode(upper.blend_mode)
         painter.drawPixmap(0, 0, upper.pixmap)
         painter.end()
-        self.layers.pop(self.active_index)
-        assert self.layer_tree is not None
-        self.layer_tree.detach(upper)
-        self.active_index -= 1
+        siblings.pop(position)
+        self._sync_layers_from_tree(preferred_active=lower)
         self.touch()
         return True
 
@@ -233,8 +262,7 @@ class Document:
         visible_indices = [index for index, layer in enumerate(self.layers) if layer.visible]
         if len(visible_indices) <= 1:
             return False
-        base_index = visible_indices[0]
-        base = self.layers[base_index]
+        base = self.layers[visible_indices[0]]
         if base.locked:
             return False
         result = QPixmap(self.width, self.height)
@@ -250,12 +278,9 @@ class Document:
         base.opacity = 100
         base.blend_mode = QPainter.CompositionMode.CompositionMode_SourceOver
         for index in reversed(visible_indices[1:]):
-            layer = self.layers.pop(index)
-            assert self.layer_tree is not None
+            layer = self.layers[index]
             self.layer_tree.detach(layer)
-            if index < self.active_index:
-                self.active_index -= 1
-        self.active_index = min(base_index, len(self.layers) - 1)
+        self._sync_layers_from_tree(preferred_active=base)
         self.touch()
         return True
 
