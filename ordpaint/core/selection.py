@@ -19,6 +19,7 @@ class Selection:
     def __init__(self, width: int = 1, height: int = 1) -> None:
         self._width = max(1, int(width))
         self._height = max(1, int(height))
+        self._document_bound = False
         self._mask = QImage(self._width, self._height, QImage.Format.Format_Alpha8)
         self._mask.fill(0)
         self._bounds = QRect()
@@ -46,6 +47,7 @@ class Selection:
     def set_document_size(self, width: int, height: int) -> None:
         width = max(1, int(width))
         height = max(1, int(height))
+        self._document_bound = True
         if (width, height) == (self._width, self._height):
             return
         self._width, self._height = width, height
@@ -65,6 +67,7 @@ class Selection:
 
     def copy(self) -> "Selection":
         result = Selection(self._width, self._height)
+        result._document_bound = self._document_bound
         result._mask = self._mask.copy()
         result._bounds = QRect(self._bounds)
         return result
@@ -88,15 +91,8 @@ class Selection:
         self._combine(source, mode)
 
     def move(self, dx: int, dy: int, width: int | None = None, height: int | None = None) -> None:
-        if width is not None and height is not None and (width, height) != (self._width, self._height):
-            old = self._mask.copy()
-            self._width, self._height = max(1, int(width)), max(1, int(height))
-            self._mask = QImage(self._width, self._height, QImage.Format.Format_Alpha8)
-            self._mask.fill(0)
-            painter = QPainter(self._mask)
-            painter.drawImage(0, 0, old)
-            painter.end()
-            self._recalculate_bounds()
+        if width is not None and height is not None:
+            self.set_document_size(width, height)
         if not self.active:
             return
         moved = QImage(self._width, self._height, QImage.Format.Format_Alpha8)
@@ -119,14 +115,17 @@ class Selection:
         return QRect(self._bounds)
 
     def clamp(self, width: int, height: int) -> None:
-        width = max(1, int(width))
-        height = max(1, int(height))
-        if (width, height) == (self._width, self._height):
-            self._bounds = self._bounds.intersected(QRect(0, 0, width, height))
+        self.set_document_size(width, height)
+        self._recalculate_bounds()
+
+    def _ensure_capacity(self, width: int, height: int) -> None:
+        if self._document_bound or width <= self._width and height <= self._height:
             return
-        old = self._mask.copy()
-        self._width, self._height = width, height
-        self._mask = QImage(width, height, QImage.Format.Format_Alpha8)
+        new_width = max(self._width, int(width))
+        new_height = max(self._height, int(height))
+        old = self._mask
+        self._width, self._height = new_width, new_height
+        self._mask = QImage(new_width, new_height, QImage.Format.Format_Alpha8)
         self._mask.fill(0)
         painter = QPainter(self._mask)
         painter.drawImage(0, 0, old)
@@ -134,7 +133,10 @@ class Selection:
         self._recalculate_bounds()
 
     def _combine_geometry(self, rect: QRect, shape: str, mode: SelectionMode) -> None:
-        normalized = rect.normalized().intersected(self._mask.rect())
+        rect = rect.normalized()
+        if not self._document_bound:
+            self._ensure_capacity(max(1, rect.right() + 1), max(1, rect.bottom() + 1))
+        normalized = rect.intersected(self._mask.rect())
         source = QImage(self._width, self._height, QImage.Format.Format_Alpha8)
         source.fill(0)
         if normalized.isEmpty():
@@ -156,6 +158,10 @@ class Selection:
             if mode == SelectionMode.REPLACE:
                 self.clear()
             return
+        if not self._document_bound:
+            max_x = max(point.x() for point in points)
+            max_y = max(point.y() for point in points)
+            self._ensure_capacity(max(1, max_x + 1), max(1, max_y + 1))
         source = QImage(self._width, self._height, QImage.Format.Format_Alpha8)
         source.fill(0)
         painter = QPainter(source)
