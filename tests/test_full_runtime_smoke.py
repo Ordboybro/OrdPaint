@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 from PySide6.QtCore import QPoint, Qt
 from PySide6.QtTest import QTest
 
@@ -60,6 +63,11 @@ def test_full_editor_startup_and_interaction(qapp, monkeypatch) -> None:
     assert screenshot.width() > 0
     assert screenshot.height() > 0
     assert window.devicePixelRatioF() >= 1.0
+    screenshot_path = os.environ.get("ORDPAINT_SMOKE_SCREENSHOT")
+    if screenshot_path:
+        destination = Path(screenshot_path)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        assert screenshot.save(str(destination), "PNG")
 
     window.canvas.fit_to_window()
     window.canvas.zoom_in()
