@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QPoint, QRect, Qt
-from PySide6.QtGui import QAction
+from PySide6.QtGui import QAction, QActionGroup
 
 from ordpaint.core.selection import SelectionMode
 from ordpaint.core.tools import Tool
@@ -22,16 +22,21 @@ def install(window) -> None:
         ("lasso", "Лассо", "Shift+P", Tool.SELECT_LASSO),
         ("crop", "Кадрирование", "C", Tool.CROP),
     )
+    tool_group = QActionGroup(window)
+    tool_group.setExclusive(True)
     for key, text, shortcut, tool in tools:
         action = QAction(text, window)
         action.setShortcut(shortcut)
         action.setCheckable(True)
         action.triggered.connect(lambda checked=False, value=tool: window.canvas.set_tool(value))
         menu.addAction(action)
+        tool_group.addAction(action)
         actions[key] = action
+    actions["rect"].setChecked(window.canvas.tool is Tool.SELECT_RECT)
 
     mode_menu = menu.addMenu("Режим")
-    mode_group = []
+    mode_group = QActionGroup(window)
+    mode_group.setExclusive(True)
     for mode, text, shortcut in (
         (SelectionMode.REPLACE, "Заменить", "Alt+1"),
         (SelectionMode.ADD, "Добавить", "Alt+2"),
@@ -43,8 +48,9 @@ def install(window) -> None:
         action.setCheckable(True)
         action.triggered.connect(lambda checked=False, value=mode: window.canvas.set_selection_mode(value))
         mode_menu.addAction(action)
-        mode_group.append((mode, action))
-    mode_group[0][1].setChecked(True)
+        mode_group.addAction(action)
+        if mode is SelectionMode.REPLACE:
+            action.setChecked(True)
 
     original_press = Canvas.mousePressEvent
     original_move = Canvas.mouseMoveEvent
