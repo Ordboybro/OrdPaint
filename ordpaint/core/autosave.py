@@ -9,10 +9,11 @@ from .project import ProjectError, load_project, save_project
 
 @dataclass
 class AutosaveManager:
-    """Revision-based crash-recovery layer around the native project serializer."""
+    """Revision-based crash recovery with a small rotating history of snapshots."""
 
     path: Path
     last_revision: int | None = None
+    max_versions: int = 3
 
     @classmethod
     def for_project(cls, project_path: str | Path) -> "AutosaveManager":
@@ -24,6 +25,9 @@ class AutosaveManager:
         root = Path(directory).expanduser()
         return cls(root / f".{name}.autosave")
 
+    def _version_path(self, index: int) -> Path:
+        return self.path.with_name(f"{self.path.name}.{index}")
+
     def needs_autosave(self, document: Document) -> bool:
         return self.last_revision != document.revision
 
@@ -31,6 +35,12 @@ class AutosaveManager:
         if not force and not self.needs_autosave(document):
             return False
         try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            for index in range(self.max_versions - 1, 0, -1):
+                source = self._version_path(index - 1) if index > 1 else self.path
+                target = self._version_path(index)
+                if source.exists():
+                    source.replace(target)
             save_project(document, self.path)
         except (OSError, ProjectError):
             return False
@@ -43,17 +53,32 @@ class AutosaveManager:
         except OSError:
             return False
 
-    def recover(self) -> Document:
-        if not self.has_recovery():
+    def recovery_versions(self) -> list[Path]:
+        candidates = [self.path] + [self._version_path(i) for i in range(1, self.max_versions)]
+        result = []
+        for path in candidates:
+            try:
+                if path.is_file() and path.stat().st_size > 0:
+                    result.append(path)
+            except OSError:
+                continue
+        return result
+
+    def recover(self, path: str | Path | None = None) -> Document:
+        source = Path(path).expanduser() if path else self.path
+        if not source.is_file():
             raise ProjectError("No autosave recovery is available")
-        return load_project(self.path)
+        return load_project(source)
 
     def discard(self) -> bool:
-        try:
-            self.path.unlink()
-        except FileNotFoundError:
-            return False
-        except OSError:
-            return False
+        removed = False
+        for path in [self.path] + [self._version_path(i) for i in range(1, self.max_versions)]:
+            try:
+                path.unlink()
+                removed = True
+            except FileNotFoundError:
+                pass
+            except OSError:
+                return removed
         self.last_revision = None
-        return True
+        return removed
