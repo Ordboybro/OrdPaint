@@ -95,10 +95,15 @@ class Selection:
             self._resize_preserve(width, height, document_bound=True)
         if not self.active:
             return
+        dx = int(dx)
+        dy = int(dy)
+        if self._document_bound:
+            dx = max(-self._bounds.left(), min(dx, self._width - self._bounds.right() - 1))
+            dy = max(-self._bounds.top(), min(dy, self._height - self._bounds.bottom() - 1))
         moved = QImage(self._width, self._height, QImage.Format.Format_Alpha8)
         moved.fill(0)
         painter = QPainter(moved)
-        painter.drawImage(int(dx), int(dy), self._mask)
+        painter.drawImage(dx, dy, self._mask)
         painter.end()
         self._mask = moved
         self._recalculate_bounds()
