@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import StrEnum
 
 from PySide6.QtCore import QPoint, QRect
-from PySide6.QtGui import QImage, QPainter, QPolygon
+from PySide6.QtGui import QColor, QImage, QPainter, QPolygon
 
 
 class SelectionMode(StrEnum):
@@ -16,9 +16,8 @@ class SelectionMode(StrEnum):
 class Selection:
     """Pixel-accurate selection model with rectangle, ellipse, polygon and lasso support.
 
-    ``rect`` remains available for compatibility and always exposes the mask's
-    bounding rectangle. Editing code can use ``mask``/``contains`` for exact
-    pixel clipping.
+    ``rect`` remains available for compatibility and exposes the mask's bounding
+    rectangle. Editing code can use ``mask``/``coverage`` for exact clipping.
     """
 
     def __init__(self, width: int = 1, height: int = 1) -> None:
@@ -29,7 +28,7 @@ class Selection:
 
     @property
     def active(self) -> bool:
-        return not self._mask.isNull() and not self._mask.isAllGray() if False else not self.bounding_rect().isEmpty()
+        return not self.bounding_rect().isEmpty()
 
     @property
     def rect(self) -> QRect | None:
@@ -79,8 +78,7 @@ class Selection:
     def combine_mask(self, mask: QImage, mode: SelectionMode = SelectionMode.REPLACE) -> None:
         if mask.size() != self._mask.size():
             raise ValueError("Selection mask dimensions must match the document")
-        source = mask.convertToFormat(QImage.Format.Format_Grayscale8)
-        self._combine(source, mode)
+        self._combine(mask.convertToFormat(QImage.Format.Format_Grayscale8), mode)
 
     def move(self, dx: int, dy: int, width: int | None = None, height: int | None = None) -> None:
         if width is not None and height is not None:
@@ -95,9 +93,7 @@ class Selection:
         self._mask = moved
 
     def contains(self, point: QPoint) -> bool:
-        if not self._mask.rect().contains(point):
-            return False
-        return self._mask.pixelColor(point).value() > 0
+        return self.coverage(point) > 0
 
     def coverage(self, point: QPoint) -> int:
         if not self._mask.rect().contains(point):
@@ -105,10 +101,26 @@ class Selection:
         return self._mask.pixelColor(point).value()
 
     def bounding_rect(self) -> QRect:
-        return self._mask.boundingRect() if self._mask.isNull() is False else QRect()
+        left, top = self._width, self._height
+        right, bottom = -1, -1
+        for y in range(self._height):
+            for x in range(self._width):
+                if self._mask.pixelColor(x, y).value() > 0:
+                    left = min(left, x)
+                    top = min(top, y)
+                    right = max(right, x)
+                    bottom = max(bottom, y)
+        if right < left or bottom < top:
+            return QRect()
+        return QRect(QPoint(left, top), QPoint(right, bottom))
 
     def clamp(self, width: int, height: int) -> None:
-        self.set_document_size(width, height)
+        if (width, height) != (self._width, self._height):
+            old = self._mask.copy()
+            self.set_document_size(width, height)
+            painter = QPainter(self._mask)
+            painter.drawImage(0, 0, old)
+            painter.end()
 
     def _combine_geometry(self, rect: QRect, shape: str, mode: SelectionMode) -> None:
         normalized = rect.normalized().intersected(self._mask.rect())
@@ -119,8 +131,8 @@ class Selection:
                 self.clear()
             return
         painter = QPainter(source)
-        painter.setPen(255)
-        painter.setBrush(255)
+        painter.setPen(QColor(255, 255, 255))
+        painter.setBrush(QColor(255, 255, 255))
         if shape == "ellipse":
             painter.drawEllipse(normalized)
         else:
@@ -136,8 +148,8 @@ class Selection:
         source = QImage(self._width, self._height, QImage.Format.Format_Grayscale8)
         source.fill(0)
         painter = QPainter(source)
-        painter.setPen(255)
-        painter.setBrush(255)
+        painter.setPen(QColor(255, 255, 255))
+        painter.setBrush(QColor(255, 255, 255))
         painter.drawPolygon(QPolygon(points))
         painter.end()
         self._combine(source, mode)
@@ -155,5 +167,4 @@ class Selection:
         painter.end()
 
     def to_dict(self) -> dict[str, object]:
-        """Small serializable selection descriptor for session metadata."""
         return {"width": self._width, "height": self._height, "active": self.active}
