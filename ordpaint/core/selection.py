@@ -32,6 +32,19 @@ class Selection:
     def rect(self) -> QRect | None:
         return QRect(self._bounds) if self.active else None
 
+    @rect.setter
+    def rect(self, value: QRect | None) -> None:
+        if value is None:
+            self.clear()
+            return
+        target = QRect(value).normalized()
+        if not self.active:
+            self.set_rect(target)
+            return
+        current = self._bounds.topLeft()
+        target_top_left = target.topLeft()
+        self.move(target_top_left.x() - current.x(), target_top_left.y() - current.y())
+
     @property
     def mask(self) -> QImage:
         return self._mask.copy()
