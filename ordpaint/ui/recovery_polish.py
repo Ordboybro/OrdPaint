@@ -17,7 +17,7 @@ def install(window) -> None:
         box.setText("Найден черновик после предыдущего завершения OrdPaint.")
         box.setInformativeText("Выберите, что сделать с восстановленной версией.")
         restore = box.addButton("Восстановить", QMessageBox.ButtonRole.AcceptRole)
-        later = box.addButton("Позже", QMessageBox.ButtonRole.DestructiveRole)
+        box.addButton("Позже", QMessageBox.ButtonRole.DestructiveRole)
         discard = box.addButton("Удалить", QMessageBox.ButtonRole.RejectRole)
         box.exec()
         clicked = box.clickedButton()
