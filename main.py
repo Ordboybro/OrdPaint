@@ -9,6 +9,7 @@ from ordpaint.ui.color_lab import ColorLabDock
 from ordpaint.ui.crash_reporter import install as install_crash_reporter
 from ordpaint.ui.grid_enhancement import install as install_grid_enhancement
 from ordpaint.ui.grid_ux import install as install_grid_ux
+from ordpaint.ui.image_ops import install as install_image_ops
 from ordpaint.ui.keyboard_polish import install as install_keyboard_polish
 from ordpaint.ui.layout_restore import install as install_layout_restore
 from ordpaint.ui.polish import install as install_polish
@@ -38,6 +39,7 @@ def main() -> int:
     install_transform(window)
     install_transform_advanced(window)
     install_selection_advanced(window)
+    install_image_ops(window)
     install_keyboard_polish(window)
     install_recovery_polish(window)
 
