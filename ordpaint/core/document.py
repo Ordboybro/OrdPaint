@@ -66,7 +66,7 @@ class Document:
 
     def copy(self) -> "Document":
         copied_layers = [layer.copy() for layer in self.layers]
-        mapping = {id(old): new for old, new in zip(self.layers, copied_layers)}
+        mapping = {id(old): new for old, new in zip(self.layers, copied_layers, strict=True)}
         assert self.layer_tree is not None
         copied_tree = self.layer_tree.copy_with_layer_map(mapping)
         return Document(self.width, self.height, copied_layers, self.active_index, copied_tree)
