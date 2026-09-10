@@ -11,6 +11,7 @@ from ordpaint.ui.grid_enhancement import install as install_grid_enhancement
 from ordpaint.ui.grid_ux import install as install_grid_ux
 from ordpaint.ui.image_ops import install as install_image_ops
 from ordpaint.ui.keyboard_polish import install as install_keyboard_polish
+from ordpaint.ui.layer_groups import LayerGroupDock
 from ordpaint.ui.layout_restore import install as install_layout_restore
 from ordpaint.ui.polish import install as install_polish
 from ordpaint.ui.pressure_input import install as install_pressure_input
@@ -47,6 +48,8 @@ def main() -> int:
     window.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, window.brush_presets_dock)
     window.color_lab_dock = ColorLabDock(window)
     window.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, window.color_lab_dock)
+    window.layer_group_dock = LayerGroupDock(window)
+    window.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, window.layer_group_dock)
 
     install_layout_restore(window)
     window.show()
