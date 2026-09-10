@@ -51,6 +51,7 @@ jobs:
           ruff format --check
           main.py ordpaint/core/document.py ordpaint/core/history.py ordpaint/core/layer_tree.py
           ordpaint/core/project.py tests/test_keyboard_shortcuts.py tests/test_layer_hierarchy_persistence.py
+          tests/test_full_runtime_smoke.py
       - name: Tests on Linux
         if: runner.os == 'Linux'
         env:
