@@ -274,7 +274,17 @@ class Document:
             return False
         if width * height > 100_000_000:
             raise ValueError("Canvas is too large")
-        offsets = {"top-left": (0, 0), "top": ((width - self.width) // 2, 0), "top-right": (width - self.width, 0), "left": (0, (height - self.height) // 2), "center": ((width - self.width) // 2, (height - self.height) // 2), "right": (width - self.width, (height - self.height) // 2), "bottom-left": (0, height - self.height), "bottom": ((width - self.width) // 2, height - self.height), "bottom-right": (width - self.width, height - self.height)}
+        offsets = {
+            "top-left": (0, 0),
+            "top": ((width - self.width) // 2, 0),
+            "top-right": (width - self.width, 0),
+            "left": (0, (height - self.height) // 2),
+            "center": ((width - self.width) // 2, (height - self.height) // 2),
+            "right": (width - self.width, (height - self.height) // 2),
+            "bottom-left": (0, height - self.height),
+            "bottom": ((width - self.width) // 2, height - self.height),
+            "bottom-right": (width - self.width, height - self.height),
+        }
         if anchor not in offsets:
             raise ValueError(f"Unknown canvas anchor: {anchor}")
         dx, dy = offsets[anchor]
