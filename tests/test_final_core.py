@@ -1,11 +1,11 @@
-from PySide6.QtCore import QPoint, QRect
+from PySide6.QtCore import QPoint, QPointF, QRect
 from PySide6.QtGui import QColor, QPixmap
 
-from ordpaint.core.brush_engine import BrushEngine, BrushDynamics, BrushPreset, Stabilizer
+from ordpaint.core.brush_engine import BrushDynamics, BrushEngine, BrushPreset, Stabilizer
 from ordpaint.core.document import Document
 from ordpaint.core.image_ops import crop_document, flip_document
 from ordpaint.core.layer import Layer
-from ordpaint.core.layer_tree import LayerGroup, LayerTree
+from ordpaint.core.layer_tree import LayerTree
 from ordpaint.core.selection import Selection, SelectionMode
 
 
@@ -52,10 +52,10 @@ def test_brush_engine_pressure_stabilizer_and_preview():
     assert size_high > size_low
     assert opacity_high > opacity_low
     engine.preset = BrushPreset("Stabilized", stabilizer=Stabilizer(0.8))
-    engine.begin_stroke(engine.point.__annotations__.get("point", None) or __import__("PySide6.QtCore", fromlist=["QPointF"]).QPointF(0, 0))
-    point = engine.point(__import__("PySide6.QtCore", fromlist=["QPointF"]).QPointF(10, 0), 0.5)
+    engine.begin_stroke(QPointF(0, 0))
+    point = engine.point(QPointF(10, 0), 0.5)
     assert 0 < point.x() < 10
-    assert engine.preview_points(__import__("PySide6.QtCore", fromlist=["QPointF"]).QPointF(0, 0), __import__("PySide6.QtCore", fromlist=["QPointF"]).QPointF(30, 0), 1.0)
+    assert engine.preview_points(QPointF(0, 0), QPointF(30, 0), 1.0)
 
 
 def test_crop_and_flip_document():
