@@ -43,20 +43,19 @@ def install() -> None:
         press = QEvent.Type.TabletPress
         move = QEvent.Type.TabletMove
         release = QEvent.Type.TabletRelease
-        if event.type() in {press, move}:
-            if self.tool.value in {"brush", "eraser"} and not self.document.active_layer.locked:
-                if event.type() == press:
-                    self.action_started.emit()
-                    self._drawing = True
-                    self._last_canvas_pos = point
-                    self._start_canvas_pos = point
-                    self._draw_segment(point, point)
-                elif self._drawing and self._last_canvas_pos is not None:
-                    self._draw_segment(self._last_canvas_pos, point)
-                    self._last_canvas_pos = point
-                self.update()
-                event.accept()
-                return
+        if event.type() in {press, move} and self.tool.value in {"brush", "eraser"} and not self.document.active_layer.locked:
+            if event.type() == press:
+                self.action_started.emit()
+                self._drawing = True
+                self._last_canvas_pos = point
+                self._start_canvas_pos = point
+                self._draw_segment(point, point)
+            elif self._drawing and self._last_canvas_pos is not None:
+                self._draw_segment(self._last_canvas_pos, point)
+                self._last_canvas_pos = point
+            self.update()
+            event.accept()
+            return
         if event.type() == release:
             self._drawing = False
             self._last_canvas_pos = None
