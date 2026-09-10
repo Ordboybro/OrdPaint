@@ -30,21 +30,19 @@ class ToolInfo:
 class ToolInfoRegistry(dict):
     """Tool metadata registry with legacy palette iteration compatibility."""
 
-    _legacy_palette = frozenset(
-        {
-            Tool.BRUSH,
-            Tool.ERASER,
-            Tool.LINE,
-            Tool.RECTANGLE,
-            Tool.ELLIPSE,
-            Tool.FILL,
-            Tool.EYEDROPPER,
-            Tool.SELECT_RECT,
-        }
+    _legacy_palette_order = (
+        Tool.BRUSH,
+        Tool.ERASER,
+        Tool.LINE,
+        Tool.RECTANGLE,
+        Tool.ELLIPSE,
+        Tool.FILL,
+        Tool.EYEDROPPER,
+        Tool.SELECT_RECT,
     )
 
     def __iter__(self):
-        return (tool for tool in super().__iter__() if tool in self._legacy_palette)
+        return iter(self._legacy_palette_order)
 
 
 TOOL_INFO = ToolInfoRegistry(
