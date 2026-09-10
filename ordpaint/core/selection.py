@@ -92,7 +92,7 @@ class Selection:
 
     def move(self, dx: int, dy: int, width: int | None = None, height: int | None = None) -> None:
         if width is not None and height is not None:
-            self.set_document_size(width, height)
+            self._resize_preserve(width, height, document_bound=True)
         if not self.active:
             return
         moved = QImage(self._width, self._height, QImage.Format.Format_Alpha8)
@@ -115,21 +115,28 @@ class Selection:
         return QRect(self._bounds)
 
     def clamp(self, width: int, height: int) -> None:
-        self.set_document_size(width, height)
+        self._resize_preserve(width, height, document_bound=True)
         self._recalculate_bounds()
 
-    def _ensure_capacity(self, width: int, height: int) -> None:
-        if self._document_bound or width <= self._width and height <= self._height:
+    def _resize_preserve(self, width: int, height: int, *, document_bound: bool) -> None:
+        width = max(1, int(width))
+        height = max(1, int(height))
+        if document_bound:
+            self._document_bound = True
+        if (width, height) == (self._width, self._height):
             return
-        new_width = max(self._width, int(width))
-        new_height = max(self._height, int(height))
         old = self._mask
-        self._width, self._height = new_width, new_height
-        self._mask = QImage(new_width, new_height, QImage.Format.Format_Alpha8)
+        self._width, self._height = width, height
+        self._mask = QImage(width, height, QImage.Format.Format_Alpha8)
         self._mask.fill(0)
         painter = QPainter(self._mask)
         painter.drawImage(0, 0, old)
         painter.end()
+
+    def _ensure_capacity(self, width: int, height: int) -> None:
+        if self._document_bound or width <= self._width and height <= self._height:
+            return
+        self._resize_preserve(width, height, document_bound=False)
         self._recalculate_bounds()
 
     def _combine_geometry(self, rect: QRect, shape: str, mode: SelectionMode) -> None:
