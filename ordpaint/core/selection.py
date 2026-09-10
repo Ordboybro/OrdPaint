@@ -14,12 +14,12 @@ class SelectionMode(StrEnum):
 
 
 class Selection:
-    """Pixel-accurate selection model with cached bounds for fast UI queries."""
+    """Pixel-accurate selection model with a document-sized alpha mask."""
 
     def __init__(self, width: int = 1, height: int = 1) -> None:
         self._width = max(1, int(width))
         self._height = max(1, int(height))
-        self._mask = QImage(self._width, self._height, QImage.Format.Format_Grayscale8)
+        self._mask = QImage(self._width, self._height, QImage.Format.Format_Alpha8)
         self._mask.fill(0)
         self._bounds = QRect()
 
@@ -35,13 +35,21 @@ class Selection:
     def mask(self) -> QImage:
         return self._mask.copy()
 
+    @property
+    def width(self) -> int:
+        return self._width
+
+    @property
+    def height(self) -> int:
+        return self._height
+
     def set_document_size(self, width: int, height: int) -> None:
         width = max(1, int(width))
         height = max(1, int(height))
         if (width, height) == (self._width, self._height):
             return
         self._width, self._height = width, height
-        self._mask = QImage(width, height, QImage.Format.Format_Grayscale8)
+        self._mask = QImage(width, height, QImage.Format.Format_Alpha8)
         self._mask.fill(0)
         self._bounds = QRect()
 
@@ -76,26 +84,28 @@ class Selection:
     def combine_mask(self, mask: QImage, mode: SelectionMode = SelectionMode.REPLACE) -> None:
         if mask.size() != self._mask.size():
             raise ValueError("Selection mask dimensions must match the document")
-        source = mask.convertToFormat(QImage.Format.Format_Grayscale8)
+        source = mask.convertToFormat(QImage.Format.Format_Alpha8)
         self._combine(source, mode)
 
     def move(self, dx: int, dy: int, width: int | None = None, height: int | None = None) -> None:
         if width is not None and height is not None and (width, height) != (self._width, self._height):
             old = self._mask.copy()
-            self.set_document_size(width, height)
+            self._width, self._height = max(1, int(width)), max(1, int(height))
+            self._mask = QImage(self._width, self._height, QImage.Format.Format_Alpha8)
+            self._mask.fill(0)
             painter = QPainter(self._mask)
             painter.drawImage(0, 0, old)
             painter.end()
             self._recalculate_bounds()
         if not self.active:
             return
-        moved = QImage(self._width, self._height, QImage.Format.Format_Grayscale8)
+        moved = QImage(self._width, self._height, QImage.Format.Format_Alpha8)
         moved.fill(0)
         painter = QPainter(moved)
         painter.drawImage(int(dx), int(dy), self._mask)
         painter.end()
         self._mask = moved
-        self._bounds = self._bounds.translated(int(dx), int(dy)).intersected(self._mask.rect())
+        self._recalculate_bounds()
 
     def contains(self, point: QPoint) -> bool:
         return self.coverage(point) > 0
@@ -103,16 +113,21 @@ class Selection:
     def coverage(self, point: QPoint) -> int:
         if not self._bounds.contains(point):
             return 0
-        return self._mask.pixelColor(point).value()
+        return self._mask.pixelColor(point).alpha()
 
     def bounding_rect(self) -> QRect:
         return QRect(self._bounds)
 
     def clamp(self, width: int, height: int) -> None:
+        width = max(1, int(width))
+        height = max(1, int(height))
         if (width, height) == (self._width, self._height):
+            self._bounds = self._bounds.intersected(QRect(0, 0, width, height))
             return
         old = self._mask.copy()
-        self.set_document_size(width, height)
+        self._width, self._height = width, height
+        self._mask = QImage(width, height, QImage.Format.Format_Alpha8)
+        self._mask.fill(0)
         painter = QPainter(self._mask)
         painter.drawImage(0, 0, old)
         painter.end()
@@ -120,7 +135,7 @@ class Selection:
 
     def _combine_geometry(self, rect: QRect, shape: str, mode: SelectionMode) -> None:
         normalized = rect.normalized().intersected(self._mask.rect())
-        source = QImage(self._width, self._height, QImage.Format.Format_Grayscale8)
+        source = QImage(self._width, self._height, QImage.Format.Format_Alpha8)
         source.fill(0)
         if normalized.isEmpty():
             if mode == SelectionMode.REPLACE:
@@ -141,7 +156,7 @@ class Selection:
             if mode == SelectionMode.REPLACE:
                 self.clear()
             return
-        source = QImage(self._width, self._height, QImage.Format.Format_Grayscale8)
+        source = QImage(self._width, self._height, QImage.Format.Format_Alpha8)
         source.fill(0)
         painter = QPainter(source)
         painter.setPen(QColor(255, 255, 255))
@@ -162,13 +177,7 @@ class Selection:
         painter.setCompositionMode(modes[mode])
         painter.drawImage(0, 0, source)
         painter.end()
-        if mode == SelectionMode.REPLACE:
-            self._bounds = source.rect().intersected(self._nonzero_bounds(source))
-        elif mode == SelectionMode.ADD:
-            source_bounds = self._nonzero_bounds(source)
-            self._bounds = source_bounds if self._bounds.isEmpty() else self._bounds.united(source_bounds)
-        else:
-            self._recalculate_bounds()
+        self._bounds = self._nonzero_bounds(self._mask)
 
     @staticmethod
     def _nonzero_bounds(image: QImage) -> QRect:
@@ -176,7 +185,7 @@ class Selection:
         right, bottom = -1, -1
         for y in range(image.height()):
             for x in range(image.width()):
-                if image.pixelColor(x, y).value() > 0:
+                if image.pixelColor(x, y).alpha() > 0:
                     left = min(left, x)
                     top = min(top, y)
                     right = max(right, x)
