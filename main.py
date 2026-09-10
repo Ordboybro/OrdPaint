@@ -18,6 +18,7 @@ from ordpaint.ui.pressure_input import install as install_pressure_input
 from ordpaint.ui.recovery_polish import install as install_recovery_polish
 from ordpaint.ui.resize_integration import install as install_resize
 from ordpaint.ui.selection_advanced import install as install_selection_advanced
+from ordpaint.ui.selection_clip import install as install_selection_clip
 from ordpaint.ui.transform_advanced import install as install_transform_advanced
 from ordpaint.ui.transform_integration import install as install_transform
 
@@ -40,6 +41,7 @@ def main() -> int:
     install_transform(window)
     install_transform_advanced(window)
     install_selection_advanced(window)
+    install_selection_clip()
     install_image_ops(window)
     install_keyboard_polish(window)
     install_recovery_polish(window)
