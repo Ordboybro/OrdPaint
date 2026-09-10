@@ -17,7 +17,7 @@ class History:
 
     def __init__(self, limit: int = 100, memory_limit_mb: int = 512) -> None:
         self.limit = max(1, int(limit))
-        self.memory_limit_bytes = max(64, int(memory_limit_mb)) * 1024 * 1024
+        self.memory_limit_bytes = max(1, int(memory_limit_mb)) * 1024 * 1024
         self._undo: list[HistoryState] = []
         self._redo: list[HistoryState] = []
         self._undo_bytes = 0
@@ -31,7 +31,8 @@ class History:
     @staticmethod
     def _estimate_bytes(document: Document) -> int:
         pixels = max(1, document.width * document.height)
-        return pixels * 4 * max(1, len(document.layers))
+        layers = max(1, len(document.layers))
+        return pixels * 4 * layers + 64 * 1024
 
     def clear(self) -> None:
         self._undo.clear()
