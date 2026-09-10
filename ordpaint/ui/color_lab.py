@@ -5,7 +5,7 @@ import math
 
 from PySide6.QtCore import QPointF, QSettings, Qt, Signal
 from PySide6.QtGui import QColor, QImage, QPainter, QPen
-from PySide6.QtWidgets import QDockWidget, QFormLayout, QGridLayout, QHBoxLayout, QLabel, QPushButton, QSpinBox, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QDockWidget, QFormLayout, QGridLayout, QHBoxLayout, QPushButton, QSpinBox, QVBoxLayout, QWidget
 
 
 class ColorWheel(QWidget):
@@ -119,7 +119,8 @@ class ColorLabDock(QDockWidget):
 
     def _set_color(self, color: QColor) -> None:
         color = QColor(color)
-        if not color.isValid(): return
+        if not color.isValid():
+            return
         self.foreground = color; self.window.canvas.set_color(color); self._sync(color)
         self.window.statusBar().showMessage(f"Цвет {color.name(QColor.NameFormat.HexArgb).upper()}", 900)
 
@@ -131,7 +132,8 @@ class ColorLabDock(QDockWidget):
         self._syncing = False
 
     def _from_channels(self) -> None:
-        if self._syncing: return
+        if self._syncing:
+            return
         self._set_color(QColor.fromHsv(self.h.value(), self.s.value(), self.v.value(), self.foreground.alpha()))
 
     def swap_colors(self) -> None:
