@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QRect, Qt
-from PySide6.QtGui import QImage, QPainter, QPixmap, QTransform
+from PySide6.QtGui import QImage, QPixmap, QTransform
 
 
 def crop_pixmap(pixmap: QPixmap, rect: QRect) -> QPixmap:
@@ -13,7 +13,7 @@ def crop_pixmap(pixmap: QPixmap, rect: QRect) -> QPixmap:
 def crop_document(document, rect: QRect) -> bool:
     """Crop every layer to the same document rectangle."""
     bounds = rect.normalized().intersected(QRect(0, 0, document.width, document.height))
-    if bounds.isEmpty() or bounds.width() == document.width and bounds.height() == document.height:
+    if bounds.isEmpty() or (bounds.width() == document.width and bounds.height() == document.height):
         return False
     for layer in document.layers:
         layer.pixmap = crop_pixmap(layer.pixmap, bounds)
@@ -46,9 +46,8 @@ def rotate_document(document, angle: float) -> bool:
     transform = QTransform().rotate(angle)
     for layer in document.layers:
         layer.pixmap = layer.pixmap.transformed(transform, Qt.TransformationMode.SmoothTransformation)
-    new_width = max(1, document.layers[0].pixmap.width())
-    new_height = max(1, document.layers[0].pixmap.height())
-    document.width, document.height = new_width, new_height
+    document.width = max(1, document.layers[0].pixmap.width())
+    document.height = max(1, document.layers[0].pixmap.height())
     document.touch()
     return True
 
