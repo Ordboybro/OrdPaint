@@ -109,7 +109,16 @@ def _serialize_tree(nodes, layer_indices: dict[int, int]) -> list[dict]:
     result = []
     for node in nodes:
         if isinstance(node, LayerGroup):
-            result.append({"type": "group", "name": node.name, "visible": node.visible, "opacity": node.opacity, "locked": node.locked, "children": _serialize_tree(node.children, layer_indices)})
+            result.append(
+                {
+                    "type": "group",
+                    "name": node.name,
+                    "visible": node.visible,
+                    "opacity": node.opacity,
+                    "locked": node.locked,
+                    "children": _serialize_tree(node.children, layer_indices),
+                }
+            )
         else:
             result.append({"type": "layer", "index": layer_indices[id(node)]})
     return result
@@ -125,7 +134,17 @@ def save_project(document: Document, path: str | Path) -> None:
         "width": document.width,
         "height": document.height,
         "active_index": document.active_index,
-        "layers": [{"name": layer.name, "visible": layer.visible, "opacity": layer.opacity, "locked": layer.locked, "blend_mode": int(layer.blend_mode.value), "image": _encode_png(layer.pixmap)} for layer in document.layers],
+        "layers": [
+            {
+                "name": layer.name,
+                "visible": layer.visible,
+                "opacity": layer.opacity,
+                "locked": layer.locked,
+                "blend_mode": int(layer.blend_mode.value),
+                "image": _encode_png(layer.pixmap),
+            }
+            for layer in document.layers
+        ],
         "layer_tree": _serialize_tree(document.layer_tree.children, layer_indices),
     }
     encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
@@ -211,7 +230,11 @@ def _deserialize_tree(raw_nodes, layers: list[Layer]) -> LayerTree:
                 if not 0 <= opacity <= 100:
                     raise ProjectError("Некорректная непрозрачность группы.")
                 children = parse(item.get("children"))
-                result.append(LayerGroup(str(item.get("name", "Group"))[:MAX_LAYER_NAME_LENGTH] or "Group", children, bool(item.get("visible", True)), opacity, bool(item.get("locked", False))))
+                result.append(
+                    LayerGroup(
+                        str(item.get("name", "Group"))[:MAX_LAYER_NAME_LENGTH] or "Group", children, bool(item.get("visible", True)), opacity, bool(item.get("locked", False))
+                    )
+                )
             else:
                 raise ProjectError("Неизвестный тип узла иерархии.")
         return result

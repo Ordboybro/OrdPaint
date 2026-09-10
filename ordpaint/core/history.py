@@ -44,9 +44,7 @@ class History:
         self.cancel_transaction()
 
     def _trim_undo(self) -> None:
-        while len(self._undo) > self.limit or (
-            len(self._undo) > 1 and self._undo_bytes > self.memory_limit_bytes
-        ):
+        while len(self._undo) > self.limit or (len(self._undo) > 1 and self._undo_bytes > self.memory_limit_bytes):
             state = self._undo.pop(0)
             self._undo_bytes -= self._estimate_bytes(state.document)
 
