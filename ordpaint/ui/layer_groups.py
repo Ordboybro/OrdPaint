@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QDockWidget, QHBoxLayout, QPushButton, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QCheckBox, QDockWidget, QDoubleSpinBox, QHBoxLayout, QLabel, QPushButton, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget
 
-from ordpaint.core.layer_tree import LayerGroup, LayerTree
+from ordpaint.core.layer import Layer
+from ordpaint.core.layer_tree import LayerGroup
 
 
 class _GroupTreeWidget(QTreeWidget):
@@ -11,54 +12,72 @@ class _GroupTreeWidget(QTreeWidget):
         super().__init__(parent)
         self.owner = owner
 
+    def startDrag(self, supported_actions) -> None:
+        self.owner._begin_structure_edit()
+        super().startDrag(supported_actions)
+
     def dropEvent(self, event) -> None:
         super().dropEvent(event)
         self.owner.sync_model_from_widget()
 
 
 class LayerGroupDock(QDockWidget):
-    """Hierarchy workspace for grouping document layers with drag/drop nesting."""
+    """Persistent hierarchy workspace backed directly by Document.layer_tree."""
 
     def __init__(self, window) -> None:
         super().__init__("Группы слоёв", window)
         self.window = window
-        self.tree = LayerTree()
         self.widget = QWidget(self)
-        self.layout = QVBoxLayout(self.widget)
+        layout = QVBoxLayout(self.widget)
         self.list = _GroupTreeWidget(self, self.widget)
         self.list.setHeaderLabels(["Слои и группы"])
         self.list.setDragEnabled(True)
         self.list.setAcceptDrops(True)
         self.list.setDropIndicatorShown(True)
         self.list.setDragDropMode(QTreeWidget.DragDropMode.InternalMove)
+        self.list.itemSelectionChanged.connect(self._selection_changed)
         self.list.itemChanged.connect(self._item_changed)
-        self.layout.addWidget(self.list)
-        buttons = QHBoxLayout()
-        add_group = QPushButton("+ Группа", self.widget)
-        add_group.clicked.connect(self.add_group)
-        add_group.setToolTip("Создать вложенную группу")
-        buttons.addWidget(add_group)
-        self.layout.addLayout(buttons)
+        layout.addWidget(self.list)
+        controls = QHBoxLayout()
+        add = QPushButton("+ Группа", self.widget)
+        remove = QPushButton("−", self.widget)
+        add.clicked.connect(self.add_group)
+        remove.clicked.connect(self.remove_group)
+        controls.addWidget(add)
+        controls.addWidget(remove)
+        layout.addLayout(controls)
+        props = QHBoxLayout()
+        props.addWidget(QLabel("Opacity"))
+        self.opacity = QDoubleSpinBox(self.widget)
+        self.opacity.setRange(0, 100)
+        self.opacity.setDecimals(0)
+        self.opacity.setSuffix("%")
+        self.opacity.valueChanged.connect(self._opacity_changed)
+        self.locked = QCheckBox("Lock", self.widget)
+        self.locked.toggled.connect(self._lock_changed)
+        props.addWidget(self.opacity)
+        props.addWidget(self.locked)
+        layout.addLayout(props)
         self.setWidget(self.widget)
-        self._items: dict[int, LayerGroup | object] = {}
+        self._items: dict[int, Layer | LayerGroup] = {}
+        self._updating = False
         self.refresh()
+
+    def _begin_structure_edit(self) -> None:
+        push = getattr(self.window, "_push_history", None)
+        if callable(push):
+            push()
 
     def refresh(self) -> None:
         self.list.blockSignals(True)
         self.list.clear()
-        self.tree = LayerTree()
-        for layer in reversed(self.window.document.layers):
-            self.tree.add_layer(layer)
-        self._rebuild_items()
-        self.list.blockSignals(False)
-
-    def _rebuild_items(self) -> None:
-        self.list.blockSignals(True)
-        self.list.clear()
         self._items.clear()
-        self._append_children(self.list.invisibleRootItem(), self.tree.children)
+        tree = getattr(self.window.document, "layer_tree", None)
+        if tree is not None:
+            self._append_children(self.list.invisibleRootItem(), tree.children)
         self.list.expandAll()
         self.list.blockSignals(False)
+        self._selection_changed()
 
     def _append_children(self, parent_item, children) -> None:
         for node in children:
@@ -68,34 +87,59 @@ class LayerGroupDock(QDockWidget):
             if isinstance(node, LayerGroup):
                 self._append_children(item, node.children)
 
+    def _current_node(self):
+        item = self.list.currentItem()
+        return self._items.get(id(item)) if item is not None else None
+
     def add_group(self) -> None:
-        selected = self.list.currentItem()
-        parent = self._items.get(id(selected)) if selected is not None else None
-        if parent is not None and not isinstance(parent, LayerGroup):
-            parent = None
-        self.tree.add_group("Group", parent)
-        self._rebuild_items()
-        self.list.expandAll()
+        self._begin_structure_edit()
+        node = self._current_node()
+        parent = node if isinstance(node, LayerGroup) else None
+        self.window.document.add_group("Group", parent)
         self.window.dirty = True
         self.window._update_window_title()
+        self.refresh()
+
+    def remove_group(self) -> None:
+        node = self._current_node()
+        if not isinstance(node, LayerGroup):
+            return
+        self._begin_structure_edit()
+        self.window.document.remove_group(node)
+        self.window.dirty = True
+        self.window._update_window_title()
+        self.refresh()
 
     def _item_changed(self, item: QTreeWidgetItem, column: int) -> None:
-        if column != 0:
+        if self._updating or column != 0:
             return
         node = self._items.get(id(item))
         if node is None:
             return
-        name = item.text(0).strip()
+        name = item.text(0).strip() or ("Group" if isinstance(node, LayerGroup) else "Layer")
+        self._begin_structure_edit()
         if isinstance(node, LayerGroup):
-            node.name = name[:128] or "Group"
+            self.window.document.set_group_properties(node, name=name)
         else:
             self.window.document.rename_layer(self.window.document.layers.index(node), name)
         self.window.dirty = True
         self.window._update_window_title()
 
     def sync_model_from_widget(self) -> None:
-        self.tree.children = self._read_children(self.list.invisibleRootItem())
-        self.sync_to_document()
+        tree = getattr(self.window.document, "layer_tree", None)
+        if tree is None:
+            return
+        try:
+            tree.children = self._read_children(self.list.invisibleRootItem())
+            self.window.document._normalize_tree()
+            self.window.document.touch()
+        except (KeyError, ValueError):
+            self.refresh()
+            return
+        self.window.dirty = True
+        self.window._update_window_title()
+        self.window._refresh_layers()
+        self.window.canvas.update()
 
     def _read_children(self, parent_item) -> list:
         children = []
@@ -109,12 +153,35 @@ class LayerGroupDock(QDockWidget):
             children.append(node)
         return children
 
-    def sync_to_document(self) -> None:
-        layers = list(self.tree.iter_layers())
-        if not layers:
+    def _selection_changed(self) -> None:
+        node = self._current_node()
+        enabled = isinstance(node, LayerGroup)
+        self._updating = True
+        self.opacity.setEnabled(enabled)
+        self.locked.setEnabled(enabled)
+        if enabled:
+            self.opacity.setValue(node.opacity)
+            self.locked.setChecked(node.locked)
+        self._updating = False
+
+    def _opacity_changed(self, value: float) -> None:
+        if self._updating:
             return
-        self.window.document.layers = list(reversed(layers))
-        self.window.document.active_index = min(self.window.document.active_index, len(self.window.document.layers) - 1)
-        self.window.document.touch()
-        self.window._refresh_layers()
-        self.window.canvas.update()
+        node = self._current_node()
+        if isinstance(node, LayerGroup):
+            self._begin_structure_edit()
+            self.window.document.set_group_properties(node, opacity=int(value))
+            self.window.dirty = True
+            self.window._update_window_title()
+            self.window.canvas.update()
+
+    def _lock_changed(self, checked: bool) -> None:
+        if self._updating:
+            return
+        node = self._current_node()
+        if isinstance(node, LayerGroup):
+            self._begin_structure_edit()
+            self.window.document.set_group_properties(node, locked=checked)
+            self.window.dirty = True
+            self.window._update_window_title()
+            self.window.canvas.update()

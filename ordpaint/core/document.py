@@ -7,6 +7,7 @@ from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QColor, QPainter, QPixmap
 
 from .layer import Layer
+from .layer_tree import LayerGroup, LayerTree
 
 
 @dataclass
@@ -15,10 +16,9 @@ class Document:
     height: int = 720
     layers: list[Layer] = field(default_factory=list)
     active_index: int = 0
+    layer_tree: LayerTree | None = field(default=None, repr=False)
     revision: int = field(default=0, init=False, repr=False, compare=False)
-    _composite_cache: OrderedDict[tuple[int, int, int, int], QPixmap] = field(
-        default_factory=OrderedDict, init=False, repr=False, compare=False
-    )
+    _composite_cache: OrderedDict[tuple[int, int, int, int], QPixmap] = field(default_factory=OrderedDict, init=False, repr=False, compare=False)
     _COMPOSITE_CACHE_LIMIT = 4
     _COMPOSITE_CACHE_MAX_PIXELS = 4_000_000
 
@@ -28,6 +28,33 @@ class Document:
         if not self.layers:
             self.add_layer("Layer 1")
         self.active_index = max(0, min(self.active_index, len(self.layers) - 1))
+        if self.layer_tree is None:
+            self.layer_tree = LayerTree(children=list(self.layers))
+        else:
+            self._normalize_tree()
+
+    def _normalize_tree(self) -> None:
+        assert self.layer_tree is not None
+        valid = {id(layer): layer for layer in self.layers}
+        seen: set[int] = set()
+
+        def clean_nodes(nodes):
+            result = []
+            for node in nodes:
+                if isinstance(node, LayerGroup):
+                    node.children = clean_nodes(node.children)
+                    if node.children:
+                        result.append(node)
+                elif id(node) in valid and id(node) not in seen:
+                    seen.add(id(node))
+                    result.append(node)
+            return result
+
+        self.layer_tree.children = clean_nodes(self.layer_tree.children)
+        for layer in self.layers:
+            if id(layer) not in seen:
+                self.layer_tree.children.append(layer)
+                seen.add(id(layer))
 
     @property
     def active_layer(self) -> Layer:
@@ -38,12 +65,11 @@ class Document:
         self._composite_cache.clear()
 
     def copy(self) -> "Document":
-        return Document(
-            width=self.width,
-            height=self.height,
-            layers=[layer.copy() for layer in self.layers],
-            active_index=self.active_index,
-        )
+        copied_layers = [layer.copy() for layer in self.layers]
+        mapping = {id(old): new for old, new in zip(self.layers, copied_layers)}
+        assert self.layer_tree is not None
+        copied_tree = self.layer_tree.copy_with_layer_map(mapping)
+        return Document(self.width, self.height, copied_layers, self.active_index, copied_tree)
 
     def add_layer(self, name: str | None = None, index: int | None = None) -> Layer:
         pixmap = QPixmap(self.width, self.height)
@@ -53,6 +79,8 @@ class Document:
             index = len(self.layers)
         index = max(0, min(index, len(self.layers)))
         self.layers.insert(index, layer)
+        if self.layer_tree is not None:
+            self.layer_tree.children.append(layer)
         self.active_index = index
         self.touch()
         return layer
@@ -61,6 +89,11 @@ class Document:
         duplicate = self.active_layer.copy()
         duplicate.name = self.unique_name(f"{duplicate.name} copy")
         self.layers.insert(self.active_index + 1, duplicate)
+        assert self.layer_tree is not None
+        parent = self.layer_tree.parent_of(self.active_layer)
+        siblings = parent.children if parent is not None else self.layer_tree.children
+        pos = siblings.index(self.active_layer) + 1
+        siblings.insert(pos, duplicate)
         self.active_index += 1
         self.touch()
         return duplicate
@@ -68,7 +101,9 @@ class Document:
     def remove_active_layer(self) -> bool:
         if len(self.layers) <= 1:
             return False
-        self.layers.pop(self.active_index)
+        layer = self.layers.pop(self.active_index)
+        if self.layer_tree is not None:
+            self.layer_tree.detach(layer)
         self.active_index = min(self.active_index, len(self.layers) - 1)
         self.touch()
         return True
@@ -132,9 +167,48 @@ class Document:
             return False
         layer = self.layers.pop(source)
         self.layers.insert(target, layer)
+        assert self.layer_tree is not None
+        parent = self.layer_tree.parent_of(layer)
+        if parent is None:
+            self.layer_tree.children = [item for item in self.layer_tree.children if item is not layer]
+            root_layers = [item for item in self.layer_tree.children if isinstance(item, Layer)]
+            root_pos = min(target, len(root_layers))
+            insert_at = len(self.layer_tree.children)
+            seen_layers = 0
+            for i, item in enumerate(self.layer_tree.children):
+                if isinstance(item, Layer):
+                    if seen_layers >= root_pos:
+                        insert_at = i
+                        break
+                    seen_layers += 1
+            self.layer_tree.children.insert(insert_at, layer)
         self.active_index = target
         self.touch()
         return True
+
+    def add_group(self, name: str = "Group", parent: LayerGroup | None = None) -> LayerGroup:
+        assert self.layer_tree is not None
+        group = self.layer_tree.add_group(name, parent)
+        self.touch()
+        return group
+
+    def remove_group(self, group: LayerGroup) -> bool:
+        assert self.layer_tree is not None
+        if not self.layer_tree.detach(group):
+            return False
+        self.touch()
+        return True
+
+    def move_node(self, node: Layer | LayerGroup, parent: LayerGroup | None, index: int | None = None) -> bool:
+        assert self.layer_tree is not None
+        self.layer_tree.move(node, parent, index)
+        self.touch()
+        return True
+
+    def set_group_properties(self, group: LayerGroup, **kwargs) -> None:
+        assert self.layer_tree is not None
+        self.layer_tree.set_group_properties(group, **kwargs)
+        self.touch()
 
     def merge_active_down(self) -> bool:
         if self.active_index <= 0:
@@ -149,6 +223,8 @@ class Document:
         painter.drawPixmap(0, 0, upper.pixmap)
         painter.end()
         self.layers.pop(self.active_index)
+        assert self.layer_tree is not None
+        self.layer_tree.detach(upper)
         self.active_index -= 1
         self.touch()
         return True
@@ -174,7 +250,9 @@ class Document:
         base.opacity = 100
         base.blend_mode = QPainter.CompositionMode.CompositionMode_SourceOver
         for index in reversed(visible_indices[1:]):
-            self.layers.pop(index)
+            layer = self.layers.pop(index)
+            assert self.layer_tree is not None
+            self.layer_tree.detach(layer)
             if index < self.active_index:
                 self.active_index -= 1
         self.active_index = min(base_index, len(self.layers) - 1)
@@ -190,24 +268,13 @@ class Document:
         return True
 
     def resize_canvas(self, width: int, height: int, anchor: str = "center") -> bool:
-        """Resize the canvas while preserving every layer and its pixels."""
         width = int(width)
         height = int(height)
         if width < 1 or height < 1 or (width == self.width and height == self.height):
             return False
         if width * height > 100_000_000:
             raise ValueError("Canvas is too large")
-        offsets = {
-            "top-left": (0, 0),
-            "top": ((width - self.width) // 2, 0),
-            "top-right": (width - self.width, 0),
-            "left": (0, (height - self.height) // 2),
-            "center": ((width - self.width) // 2, (height - self.height) // 2),
-            "right": (width - self.width, (height - self.height) // 2),
-            "bottom-left": (0, height - self.height),
-            "bottom": ((width - self.width) // 2, height - self.height),
-            "bottom-right": (width - self.width, height - self.height),
-        }
+        offsets = {"top-left": (0, 0), "top": ((width - self.width) // 2, 0), "top-right": (width - self.width, 0), "left": (0, (height - self.height) // 2), "center": ((width - self.width) // 2, (height - self.height) // 2), "right": (width - self.width, (height - self.height) // 2), "bottom-left": (0, height - self.height), "bottom": ((width - self.width) // 2, height - self.height), "bottom-right": (width - self.width, height - self.height)}
         if anchor not in offsets:
             raise ValueError(f"Unknown canvas anchor: {anchor}")
         dx, dy = offsets[anchor]
@@ -224,13 +291,7 @@ class Document:
         self.touch()
         return True
 
-    def scale_image(
-        self,
-        width: int,
-        height: int,
-        transformation_mode: Qt.TransformationMode = Qt.TransformationMode.SmoothTransformation,
-    ) -> bool:
-        """Scale the entire document and every layer using the selected resampler."""
+    def scale_image(self, width: int, height: int, transformation_mode: Qt.TransformationMode = Qt.TransformationMode.SmoothTransformation) -> bool:
         width = int(width)
         height = int(height)
         if width < 1 or height < 1 or (width == self.width and height == self.height):
@@ -239,12 +300,7 @@ class Document:
             raise ValueError("Image is too large")
         mode = Qt.TransformationMode(transformation_mode)
         for layer in self.layers:
-            layer.pixmap = layer.pixmap.scaled(
-                width,
-                height,
-                Qt.AspectRatioMode.IgnoreAspectRatio,
-                mode,
-            )
+            layer.pixmap = layer.pixmap.scaled(width, height, Qt.AspectRatioMode.IgnoreAspectRatio, mode)
         self.width = width
         self.height = height
         self.touch()
@@ -271,14 +327,8 @@ class Document:
                 return cached.copy()
         result = QPixmap(self.width, self.height)
         result.fill(color)
-        painter = QPainter(result)
-        for layer in self.layers:
-            if not layer.visible:
-                continue
-            painter.setOpacity(max(0, min(100, layer.opacity)) / 100)
-            painter.setCompositionMode(layer.blend_mode)
-            painter.drawPixmap(0, 0, layer.pixmap)
-        painter.end()
+        assert self.layer_tree is not None
+        self.layer_tree.paint_into(result)
         if use_cache:
             self._composite_cache[key] = result
             self._composite_cache.move_to_end(key)

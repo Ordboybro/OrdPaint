@@ -35,6 +35,8 @@ def main() -> int:
 
     window = MainWindow()
     install_grid_ux(window)
+    # Install the visual brush renderer first, then wrap it with the shared
+    # pressure/stabilizer engine so tablet dynamics cannot be overwritten.
     install_polish(window)
     install_pressure_input()
     install_resize(window)
