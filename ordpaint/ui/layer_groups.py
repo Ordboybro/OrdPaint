@@ -12,8 +12,16 @@ def _install_group_lock_guard() -> None:
     if getattr(Canvas, "_ordpaint_group_lock_guard", False):
         return
     original_draw = Canvas._draw_segment
+    original_shape = getattr(Canvas, "_draw_shape", None)
     original_fill = getattr(Canvas, "_flood_fill", None)
     original_delete = getattr(Canvas, "delete_selection", None)
+    original_paste = getattr(Canvas, "paste_from_clipboard", None)
+    original_begin_transform = getattr(Canvas, "begin_transform", None)
+    original_commit_transform = getattr(Canvas, "commit_transform", None)
+    original_flip_horizontal = getattr(Canvas, "flip_transform_horizontal", None)
+    original_flip_vertical = getattr(Canvas, "flip_transform_vertical", None)
+    original_rotate_clockwise = getattr(Canvas, "rotate_transform_clockwise", None)
+    original_rotate_counterclockwise = getattr(Canvas, "rotate_transform_counterclockwise", None)
 
     def locked(self) -> bool:
         tree = getattr(self.document, "layer_tree", None)
@@ -34,18 +42,65 @@ def _install_group_lock_guard() -> None:
         return original_draw(self, start, end)
 
     Canvas._draw_segment = draw_segment
+
+    if original_shape is not None:
+        def draw_shape(self, *args, **kwargs):
+            if locked(self):
+                return
+            return original_shape(self, *args, **kwargs)
+        Canvas._draw_shape = draw_shape
+
     if original_fill is not None:
         def flood_fill(self, *args, **kwargs):
             if locked(self):
                 return
             return original_fill(self, *args, **kwargs)
         Canvas._flood_fill = flood_fill
+
     if original_delete is not None:
         def delete_selection(self, *args, **kwargs):
             if locked(self):
                 return False
             return original_delete(self, *args, **kwargs)
         Canvas.delete_selection = delete_selection
+
+    if original_paste is not None:
+        def paste_from_clipboard(self, *args, **kwargs):
+            if locked(self):
+                return False
+            return original_paste(self, *args, **kwargs)
+        Canvas.paste_from_clipboard = paste_from_clipboard
+
+    if original_begin_transform is not None:
+        def begin_transform(self, *args, **kwargs):
+            if locked(self):
+                return False
+            return original_begin_transform(self, *args, **kwargs)
+        Canvas.begin_transform = begin_transform
+
+    if original_commit_transform is not None:
+        def commit_transform(self, *args, **kwargs):
+            if locked(self):
+                return False
+            return original_commit_transform(self, *args, **kwargs)
+        Canvas.commit_transform = commit_transform
+
+    for name, original in (
+        ("flip_transform_horizontal", original_flip_horizontal),
+        ("flip_transform_vertical", original_flip_vertical),
+        ("rotate_transform_clockwise", original_rotate_clockwise),
+        ("rotate_transform_counterclockwise", original_rotate_counterclockwise),
+    ):
+        if original is None:
+            continue
+
+        def guarded(self, *args, _original=original, **kwargs):
+            if locked(self):
+                return False
+            return _original(self, *args, **kwargs)
+
+        setattr(Canvas, name, guarded)
+
     Canvas._ordpaint_group_lock_guard = True
 
 
@@ -175,6 +230,7 @@ class LayerGroupDock(QDockWidget):
         try:
             tree.children = self._read_children(self.list.invisibleRootItem())
             self.window.document._normalize_tree()
+            self.window.document._sync_layers_from_tree(preferred_active=self.window.document.active_layer)
             self.window.document.touch()
         except (KeyError, ValueError):
             self.refresh()
