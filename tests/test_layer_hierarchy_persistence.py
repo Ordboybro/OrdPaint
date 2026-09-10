@@ -21,9 +21,9 @@ def test_nested_group_is_part_of_composite_and_copy(qt_app):
     assert document.layer_tree.parent_of(top) is group
 
     copied = document.copy()
-    copied_top = copied.layers[1]
-    assert isinstance(copied.layer_tree.children[0], LayerGroup)
-    assert copied.layer_tree.parent_of(copied_top) is copied.layer_tree.children[0]
+    copied_top = next(layer for layer in copied.layers if layer.name == "Top")
+    copied_group = next(node for node in copied.layer_tree.children if isinstance(node, LayerGroup))
+    assert copied.layer_tree.parent_of(copied_top) is copied_group
     assert copied_top is not top
 
 
