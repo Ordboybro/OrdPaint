@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint
+from PySide6.QtCore import QPoint, Qt
 from PySide6.QtTest import QTest
 
 from ordpaint.core.tools import Tool
+from ordpaint.ui.application_window import MainWindow
 from ordpaint.ui.brush_presets import BrushPresetDock
 from ordpaint.ui.color_lab import ColorLabDock
 from ordpaint.ui.crash_reporter import install as install_crash_reporter
@@ -21,7 +22,6 @@ from ordpaint.ui.selection_advanced import install as install_selection_advanced
 from ordpaint.ui.selection_clip import install as install_selection_clip
 from ordpaint.ui.transform_advanced import install as install_transform_advanced
 from ordpaint.ui.transform_integration import install as install_transform
-from ordpaint.ui.application_window import MainWindow
 
 
 def test_full_editor_startup_and_interaction(qapp, monkeypatch) -> None:
@@ -44,11 +44,11 @@ def test_full_editor_startup_and_interaction(qapp, monkeypatch) -> None:
     install_recovery_polish(window)
 
     window.brush_presets_dock = BrushPresetDock(window)
-    window.addDockWidget(window.brush_presets_dock.area(), window.brush_presets_dock)
+    window.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, window.brush_presets_dock)
     window.color_lab_dock = ColorLabDock(window)
-    window.addDockWidget(window.color_lab_dock.area(), window.color_lab_dock)
+    window.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, window.color_lab_dock)
     window.layer_group_dock = LayerGroupDock(window)
-    window.addDockWidget(window.layer_group_dock.area(), window.layer_group_dock)
+    window.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, window.layer_group_dock)
     install_layout_restore(window)
 
     window.show()
