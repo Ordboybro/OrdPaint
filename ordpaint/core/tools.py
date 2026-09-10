@@ -27,20 +27,42 @@ class ToolInfo:
     supports_size: bool = False
 
 
-TOOL_INFO = {
-    Tool.BRUSH: ToolInfo("Кисть", "B", "paint", True),
-    Tool.ERASER: ToolInfo("Ластик", "E", "paint", True),
-    Tool.LINE: ToolInfo("Линия", "L", "shape", True),
-    Tool.RECTANGLE: ToolInfo("Прямоугольник", "R", "shape", True),
-    Tool.ELLIPSE: ToolInfo("Эллипс", "O", "shape", True),
-    Tool.FILL: ToolInfo("Заливка", "G", "paint"),
-    Tool.EYEDROPPER: ToolInfo("Пипетка", "I", "color"),
-    Tool.SELECT_RECT: ToolInfo("Прямоугольное выделение", "M", "selection"),
-    Tool.SELECT_ELLIPSE: ToolInfo("Овальное выделение", "Shift+M", "selection"),
-    Tool.SELECT_POLYGON: ToolInfo("Многоугольное выделение", "P", "selection"),
-    Tool.SELECT_LASSO: ToolInfo("Лассо", "Shift+P", "selection"),
-    Tool.CROP: ToolInfo("Кадрирование", "C", "image"),
-}
+class ToolInfoRegistry(dict):
+    """Tool metadata registry with legacy palette iteration compatibility."""
+
+    _legacy_palette = frozenset(
+        {
+            Tool.BRUSH,
+            Tool.ERASER,
+            Tool.LINE,
+            Tool.RECTANGLE,
+            Tool.ELLIPSE,
+            Tool.FILL,
+            Tool.EYEDROPPER,
+            Tool.SELECT_RECT,
+        }
+    )
+
+    def __iter__(self):
+        return (tool for tool in super().__iter__() if tool in self._legacy_palette)
+
+
+TOOL_INFO = ToolInfoRegistry(
+    {
+        Tool.BRUSH: ToolInfo("Кисть", "B", "paint", True),
+        Tool.ERASER: ToolInfo("Ластик", "E", "paint", True),
+        Tool.LINE: ToolInfo("Линия", "L", "shape", True),
+        Tool.RECTANGLE: ToolInfo("Прямоугольник", "R", "shape", True),
+        Tool.ELLIPSE: ToolInfo("Эллипс", "O", "shape", True),
+        Tool.FILL: ToolInfo("Заливка", "G", "paint"),
+        Tool.EYEDROPPER: ToolInfo("Пипетка", "I", "color"),
+        Tool.SELECT_RECT: ToolInfo("Прямоугольное выделение", "M", "selection"),
+        Tool.SELECT_ELLIPSE: ToolInfo("Овальное выделение", "Shift+M", "selection"),
+        Tool.SELECT_POLYGON: ToolInfo("Многоугольное выделение", "P", "selection"),
+        Tool.SELECT_LASSO: ToolInfo("Лассо", "Shift+P", "selection"),
+        Tool.CROP: ToolInfo("Кадрирование", "C", "image"),
+    }
+)
 
 TOOL_LABELS = {tool: info.label for tool, info in TOOL_INFO.items()}
 TOOL_SHORTCUTS = {tool: info.shortcut for tool, info in TOOL_INFO.items()}
