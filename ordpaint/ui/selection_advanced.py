@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, Qt
+from PySide6.QtCore import QPoint, QRect, Qt
 from PySide6.QtGui import QAction
 
 from ordpaint.core.selection import SelectionMode
@@ -12,6 +12,7 @@ def install(window) -> None:
     """Install ellipse/polygon/lasso selection modes without replacing the canvas."""
     if getattr(window, "_ordpaint_selection_advanced", False):
         return
+    window.canvas.selection.set_document_size(window.document.width, window.document.height)
     actions = {}
     menu = window.menuBar().addMenu("Выделение")
     tools = (
@@ -19,6 +20,7 @@ def install(window) -> None:
         ("ellipse", "Эллипс", "Shift+M", Tool.SELECT_ELLIPSE),
         ("polygon", "Многоугольник", "P", Tool.SELECT_POLYGON),
         ("lasso", "Лассо", "Shift+P", Tool.SELECT_LASSO),
+        ("crop", "Кадрирование", "C", Tool.CROP),
     )
     for key, text, shortcut, tool in tools:
         action = QAction(text, window)
@@ -47,6 +49,11 @@ def install(window) -> None:
     original_press = Canvas.mousePressEvent
     original_move = Canvas.mouseMoveEvent
     original_release = Canvas.mouseReleaseEvent
+    original_set_document = Canvas.set_document
+
+    def set_document(self, document):
+        original_set_document(self, document)
+        self.selection.set_document_size(document.width, document.height)
 
     def press(self, event):
         if self.tool in {Tool.SELECT_ELLIPSE, Tool.SELECT_POLYGON, Tool.SELECT_LASSO}:
@@ -55,6 +62,7 @@ def install(window) -> None:
                 return
             self._advanced_selection_points = [QPoint(point)]
             self._advanced_selection_start = QPoint(point)
+            self._advanced_selection_current = QPoint(point)
             self._advanced_selection_dragging = True
             event.accept()
             self.update()
@@ -98,7 +106,7 @@ def install(window) -> None:
             point = self.widget_to_canvas(event.position()) or getattr(self, "_advanced_selection_current", self._advanced_selection_start)
             mode = getattr(self, "_selection_mode", SelectionMode.REPLACE)
             if self.tool is Tool.SELECT_ELLIPSE:
-                self.selection.set_ellipse(self._selection_rect_from_points(self._advanced_selection_start, point), mode)
+                self.selection.set_ellipse(QRect(self._advanced_selection_start, point).normalized(), mode)
             elif self.tool is Tool.SELECT_LASSO:
                 points = getattr(self, "_advanced_selection_points", [])
                 if len(points) >= 3:
@@ -114,7 +122,7 @@ def install(window) -> None:
         if getattr(self, "_crop_dragging", False):
             self._crop_dragging = False
             point = self.widget_to_canvas(event.position()) or self._crop_current
-            self.selection.set_rect(self._selection_rect_from_points(self._crop_start, point), SelectionMode.REPLACE)
+            self.selection.set_rect(QRect(self._crop_start, point).normalized(), SelectionMode.REPLACE)
             self.update()
             event.accept()
             return
@@ -123,15 +131,7 @@ def install(window) -> None:
     Canvas.mousePressEvent = press
     Canvas.mouseMoveEvent = move
     Canvas.mouseReleaseEvent = release
+    Canvas.set_document = set_document
     Canvas._ordpaint_selection_advanced = True
     window._ordpaint_selection_advanced = True
     window.selection_actions = actions
-
-
-def _selection_rect_from_points(self, start: QPoint, end: QPoint):
-    from PySide6.QtCore import QRect
-
-    return QRect(start, end).normalized()
-
-
-Canvas._selection_rect_from_points = _selection_rect_from_points
