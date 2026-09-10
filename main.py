@@ -12,6 +12,7 @@ from ordpaint.ui.grid_ux import install as install_grid_ux
 from ordpaint.ui.keyboard_polish import install as install_keyboard_polish
 from ordpaint.ui.layout_restore import install as install_layout_restore
 from ordpaint.ui.polish import install as install_polish
+from ordpaint.ui.recovery_polish import install as install_recovery_polish
 from ordpaint.ui.resize_integration import install as install_resize
 from ordpaint.ui.transform_advanced import install as install_transform_advanced
 from ordpaint.ui.transform_integration import install as install_transform
@@ -35,6 +36,7 @@ def main() -> int:
     install_transform(window)
     install_transform_advanced(window)
     install_keyboard_polish(window)
+    install_recovery_polish(window)
 
     window.brush_presets_dock = BrushPresetDock(window)
     window.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, window.brush_presets_dock)
