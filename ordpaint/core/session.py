@@ -11,11 +11,7 @@ from .recent import RecentFiles
 
 @dataclass
 class SessionManager:
-    """UI-agnostic application session state.
-
-    Keeps recent projects and the current autosave target in one small object so
-    the Qt layer only has to schedule timer ticks and persist plain settings.
-    """
+    """UI-agnostic application session state for recent files and recovery."""
 
     recent: RecentFiles = field(default_factory=RecentFiles)
     autosave_directory: Path = field(default_factory=lambda: Path.home() / ".ordpaint")
@@ -40,10 +36,10 @@ class SessionManager:
         self.autosave = AutosaveManager.for_project(self.project_path)
 
     def has_recovery(self) -> bool:
-        return self.autosave.has_recovery()
+        return bool(self.autosave.recovery_versions())
 
-    def recover_document(self) -> Document:
-        return self.autosave.recover()
+    def recover_document(self, path: str | Path | None = None) -> Document:
+        return self.autosave.recover(path)
 
     def discard_recovery(self) -> bool:
         return self.autosave.discard()
@@ -65,10 +61,12 @@ class SessionManager:
         self.recent = RecentFiles.from_list(paths, max_items=self.recent.max_items)
 
     def recover_or_none(self) -> Document | None:
-        """Return a recovered document without making startup crash on bad data."""
-        if not self.has_recovery():
-            return None
-        try:
-            return self.recover_document()
-        except (OSError, ProjectError):
-            return None
+        """Return the newest valid recovery; discard corrupt snapshots automatically."""
+        for path in self.autosave.recovery_versions():
+            try:
+                return self.recover_document(path)
+            except (OSError, ProjectError):
+                continue
+        if self.autosave.recovery_versions():
+            self.autosave.discard()
+        return None
