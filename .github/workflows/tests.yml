@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@v6
       - name: Install Qt runtime dependencies
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 xvfb
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxcb-cursor0 libxcb-xinerama0 libxkbcommon-x11-0 xvfb
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
@@ -38,19 +38,19 @@ jobs:
         shell: bash
         run: >-
           ruff format --check
-          main.py ordpaint/core ordpaint/ui/layer_list.py ordpaint/ui/new_document_dialog.py
-          ordpaint/ui/settings_store.py ordpaint/ui/grid_settings_dialog.py
-          ordpaint/ui/resize_integration.py tests benchmarks
+          main.py ordpaint/core/document.py ordpaint/core/history.py ordpaint/core/layer_tree.py
+          ordpaint/core/project.py tests/test_keyboard_shortcuts.py tests/test_layer_hierarchy_persistence.py
       - name: Tests on Linux
         if: runner.os == 'Linux'
         env:
           QT_QPA_PLATFORM: xcb
+          DISPLAY: ':99'
         shell: bash
         run: |
           set -euo pipefail
           for test_file in tests/test_*.py; do
             echo "==> $test_file"
-            xvfb-run -a python -m pytest -q "$test_file"
+            xvfb-run -a -s '-screen 0 1280x1024x24' python -m pytest -q "$test_file"
           done
       - name: Tests on Windows
         if: runner.os == 'Windows'
