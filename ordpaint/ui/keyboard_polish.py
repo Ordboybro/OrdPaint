@@ -39,15 +39,9 @@ def install(window) -> None:
         _set_shortcut(window, name, shortcut)
 
     canvas = getattr(window, "canvas", None)
-    if canvas is not None:
-        if hasattr(canvas, "reset_view"):
-            reset = QShortcut(QKeySequence("0"), window)
-            reset.activated.connect(canvas.reset_view)
-            window._ordpaint_reset_view_shortcut = reset
-        if hasattr(canvas, "fit_to_window"):
-            fit = QShortcut(QKeySequence("2"), window)
-            fit.activated.connect(canvas.fit_to_window)
-            window._ordpaint_fit_view_shortcut = fit
+    if canvas is not None and hasattr(canvas, "reset_view"):
+        reset = QShortcut(QKeySequence("0"), window)
+        reset.activated.connect(canvas.reset_view)
+        window._ordpaint_reset_view_shortcut = reset
 
-    # Make the map discoverable from the application object for future shortcut settings UI.
-    window.ordpaint_shortcuts = dict(shortcuts) | {"reset_view": "0", "fit_view": "2"}
+    window.ordpaint_shortcuts = dict(shortcuts) | {"reset_view_extra": "0"}
