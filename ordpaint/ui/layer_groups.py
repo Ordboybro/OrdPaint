@@ -5,6 +5,48 @@ from PySide6.QtWidgets import QCheckBox, QDockWidget, QDoubleSpinBox, QHBoxLayou
 
 from ordpaint.core.layer import Layer
 from ordpaint.core.layer_tree import LayerGroup
+from ordpaint.ui.canvas import Canvas
+
+
+def _install_group_lock_guard() -> None:
+    if getattr(Canvas, "_ordpaint_group_lock_guard", False):
+        return
+    original_draw = Canvas._draw_segment
+    original_fill = getattr(Canvas, "_flood_fill", None)
+    original_delete = getattr(Canvas, "delete_selection", None)
+
+    def locked(self) -> bool:
+        tree = getattr(self.document, "layer_tree", None)
+        if tree is None:
+            return False
+        node = self.document.active_layer
+        while True:
+            parent = tree.parent_of(node)
+            if parent is None:
+                return False
+            if parent.locked:
+                return True
+            node = parent
+
+    def draw_segment(self, start, end):
+        if locked(self):
+            return
+        return original_draw(self, start, end)
+
+    Canvas._draw_segment = draw_segment
+    if original_fill is not None:
+        def flood_fill(self, *args, **kwargs):
+            if locked(self):
+                return
+            return original_fill(self, *args, **kwargs)
+        Canvas._flood_fill = flood_fill
+    if original_delete is not None:
+        def delete_selection(self, *args, **kwargs):
+            if locked(self):
+                return False
+            return original_delete(self, *args, **kwargs)
+        Canvas.delete_selection = delete_selection
+    Canvas._ordpaint_group_lock_guard = True
 
 
 class _GroupTreeWidget(QTreeWidget):
@@ -25,6 +67,7 @@ class LayerGroupDock(QDockWidget):
     """Persistent hierarchy workspace backed directly by Document.layer_tree."""
 
     def __init__(self, window) -> None:
+        _install_group_lock_guard()
         super().__init__("Группы слоёв", window)
         self.window = window
         self.widget = QWidget(self)
