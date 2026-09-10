@@ -29,7 +29,6 @@ def main() -> int:
     app.setStyle("Fusion")
     install_crash_reporter()
     install_grid_enhancement()
-    install_grid_ux(window=None)
 
     window = MainWindow()
     install_grid_ux(window)
