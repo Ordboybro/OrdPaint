@@ -1,0 +1,137 @@
+from __future__ import annotations
+
+from PySide6.QtCore import QPoint, Qt
+from PySide6.QtGui import QAction
+
+from ordpaint.core.selection import SelectionMode
+from ordpaint.core.tools import Tool
+from ordpaint.ui.canvas import Canvas
+
+
+def install(window) -> None:
+    """Install ellipse/polygon/lasso selection modes without replacing the canvas."""
+    if getattr(window, "_ordpaint_selection_advanced", False):
+        return
+    actions = {}
+    menu = window.menuBar().addMenu("Выделение")
+    tools = (
+        ("rect", "Прямоугольник", "M", Tool.SELECT_RECT),
+        ("ellipse", "Эллипс", "Shift+M", Tool.SELECT_ELLIPSE),
+        ("polygon", "Многоугольник", "P", Tool.SELECT_POLYGON),
+        ("lasso", "Лассо", "Shift+P", Tool.SELECT_LASSO),
+    )
+    for key, text, shortcut, tool in tools:
+        action = QAction(text, window)
+        action.setShortcut(shortcut)
+        action.setCheckable(True)
+        action.triggered.connect(lambda checked=False, value=tool: window.canvas.set_tool(value))
+        menu.addAction(action)
+        actions[key] = action
+
+    mode_menu = menu.addMenu("Режим")
+    mode_group = []
+    for mode, text, shortcut in (
+        (SelectionMode.REPLACE, "Заменить", "Alt+1"),
+        (SelectionMode.ADD, "Добавить", "Alt+2"),
+        (SelectionMode.SUBTRACT, "Вычесть", "Alt+3"),
+        (SelectionMode.INTERSECT, "Пересечь", "Alt+4"),
+    ):
+        action = QAction(text, window)
+        action.setShortcut(shortcut)
+        action.setCheckable(True)
+        action.triggered.connect(lambda checked=False, value=mode: window.canvas.set_selection_mode(value))
+        mode_menu.addAction(action)
+        mode_group.append((mode, action))
+    mode_group[0][1].setChecked(True)
+
+    original_press = Canvas.mousePressEvent
+    original_move = Canvas.mouseMoveEvent
+    original_release = Canvas.mouseReleaseEvent
+
+    def press(self, event):
+        if self.tool in {Tool.SELECT_ELLIPSE, Tool.SELECT_POLYGON, Tool.SELECT_LASSO}:
+            point = self.widget_to_canvas(event.position())
+            if point is None or event.button() != Qt.MouseButton.LeftButton:
+                return
+            self._advanced_selection_points = [QPoint(point)]
+            self._advanced_selection_start = QPoint(point)
+            self._advanced_selection_dragging = True
+            event.accept()
+            self.update()
+            return
+        if self.tool is Tool.CROP:
+            point = self.widget_to_canvas(event.position())
+            if point is not None and event.button() == Qt.MouseButton.LeftButton:
+                self._crop_start = QPoint(point)
+                self._crop_current = QPoint(point)
+                self._crop_dragging = True
+                event.accept()
+                self.update()
+                return
+        original_press(self, event)
+
+    def move(self, event):
+        if getattr(self, "_advanced_selection_dragging", False):
+            point = self.widget_to_canvas(event.position())
+            if point is not None:
+                if self.tool is Tool.SELECT_LASSO:
+                    points = getattr(self, "_advanced_selection_points", [])
+                    if not points or (point - points[-1]).manhattanLength() >= 2:
+                        points.append(QPoint(point))
+                else:
+                    self._advanced_selection_current = QPoint(point)
+            self.update()
+            event.accept()
+            return
+        if getattr(self, "_crop_dragging", False):
+            point = self.widget_to_canvas(event.position())
+            if point is not None:
+                self._crop_current = QPoint(point)
+            self.update()
+            event.accept()
+            return
+        original_move(self, event)
+
+    def release(self, event):
+        if getattr(self, "_advanced_selection_dragging", False):
+            self._advanced_selection_dragging = False
+            point = self.widget_to_canvas(event.position()) or getattr(self, "_advanced_selection_current", self._advanced_selection_start)
+            mode = getattr(self, "_selection_mode", SelectionMode.REPLACE)
+            if self.tool is Tool.SELECT_ELLIPSE:
+                self.selection.set_ellipse(self._selection_rect_from_points(self._advanced_selection_start, point), mode)
+            elif self.tool is Tool.SELECT_LASSO:
+                points = getattr(self, "_advanced_selection_points", [])
+                if len(points) >= 3:
+                    self.selection.set_lasso(points, mode)
+            else:
+                start = self._advanced_selection_start
+                end = point
+                self.selection.set_polygon([start, QPoint(end.x(), start.y()), end, QPoint(start.x(), end.y())], mode)
+            self.document_changed.emit()
+            self.update()
+            event.accept()
+            return
+        if getattr(self, "_crop_dragging", False):
+            self._crop_dragging = False
+            point = self.widget_to_canvas(event.position()) or self._crop_current
+            self.selection.set_rect(self._selection_rect_from_points(self._crop_start, point), SelectionMode.REPLACE)
+            self.update()
+            event.accept()
+            return
+        original_release(self, event)
+
+    Canvas.mousePressEvent = press
+    Canvas.mouseMoveEvent = move
+    Canvas.mouseReleaseEvent = release
+    Canvas._ordpaint_selection_advanced = True
+    window._ordpaint_selection_advanced = True
+    window.selection_actions = actions
+
+
+def _selection_rect_from_points(self, start: QPoint, end: QPoint):
+    from PySide6.QtCore import QRect
+
+    return QRect(start, end).normalized()
+
+
+Canvas._selection_rect_from_points = _selection_rect_from_points
