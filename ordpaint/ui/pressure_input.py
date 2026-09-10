@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from PySide6.QtCore import QEvent
 from PySide6.QtGui import QTabletEvent
 
 from ordpaint.ui.canvas import Canvas
@@ -39,9 +40,12 @@ def install() -> None:
             event.ignore()
             return
         self.brush_pressure = max(0.05, min(1.0, float(event.pressure())))
-        if event.type() in {QTabletEvent.Type.TabletPress, QTabletEvent.Type.TabletMove}:
+        press = QEvent.Type.TabletPress
+        move = QEvent.Type.TabletMove
+        release = QEvent.Type.TabletRelease
+        if event.type() in {press, move}:
             if self.tool.value in {"brush", "eraser"} and not self.document.active_layer.locked:
-                if event.type() == QTabletEvent.Type.TabletPress:
+                if event.type() == press:
                     self.action_started.emit()
                     self._drawing = True
                     self._last_canvas_pos = point
@@ -53,7 +57,7 @@ def install() -> None:
                 self.update()
                 event.accept()
                 return
-        if event.type() == QTabletEvent.Type.TabletRelease:
+        if event.type() == release:
             self._drawing = False
             self._last_canvas_pos = None
             self._start_canvas_pos = None
