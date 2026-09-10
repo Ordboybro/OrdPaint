@@ -21,9 +21,19 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
+      - name: Normalize checkout line endings
+        shell: bash
+        run: |
+          git config core.autocrlf false
+          git checkout -- .
       - name: Install Qt runtime dependencies
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxcb-cursor0 libxcb-xinerama0 libxkbcommon-x11-0 xvfb
+        run: >-
+          sudo apt-get update && sudo apt-get install -y
+          libegl1 libgl1 libx11-xcb1 libxcb1 libxcb-cursor0 libxcb-icccm4
+          libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0
+          libxcb-render0 libxcb-shape0 libxcb-shm0 libxcb-sync1 libxcb-xfixes0
+          libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0 xvfb
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
@@ -35,6 +45,7 @@ jobs:
       - name: Ruff check
         run: ruff check .
       - name: Ruff format
+        if: runner.os == 'Linux'
         shell: bash
         run: >-
           ruff format --check
