@@ -6,6 +6,16 @@ from PySide6.QtWidgets import QDockWidget, QHBoxLayout, QPushButton, QTreeWidget
 from ordpaint.core.layer_tree import LayerGroup, LayerTree
 
 
+class _GroupTreeWidget(QTreeWidget):
+    def __init__(self, owner, parent=None) -> None:
+        super().__init__(parent)
+        self.owner = owner
+
+    def dropEvent(self, event) -> None:
+        super().dropEvent(event)
+        self.owner.sync_model_from_widget()
+
+
 class LayerGroupDock(QDockWidget):
     """Hierarchy workspace for grouping document layers with drag/drop nesting."""
 
@@ -15,7 +25,7 @@ class LayerGroupDock(QDockWidget):
         self.tree = LayerTree()
         self.widget = QWidget(self)
         self.layout = QVBoxLayout(self.widget)
-        self.list = QTreeWidget(self.widget)
+        self.list = _GroupTreeWidget(self, self.widget)
         self.list.setHeaderLabels(["Слои и группы"])
         self.list.setDragEnabled(True)
         self.list.setAcceptDrops(True)
@@ -43,10 +53,12 @@ class LayerGroupDock(QDockWidget):
         self.list.blockSignals(False)
 
     def _rebuild_items(self) -> None:
+        self.list.blockSignals(True)
         self.list.clear()
         self._items.clear()
         self._append_children(self.list.invisibleRootItem(), self.tree.children)
         self.list.expandAll()
+        self.list.blockSignals(False)
 
     def _append_children(self, parent_item, children) -> None:
         for node in children:
@@ -61,7 +73,7 @@ class LayerGroupDock(QDockWidget):
         parent = self._items.get(id(selected)) if selected is not None else None
         if parent is not None and not isinstance(parent, LayerGroup):
             parent = None
-        group = self.tree.add_group("Group", parent)
+        self.tree.add_group("Group", parent)
         self._rebuild_items()
         self.list.expandAll()
         self.window.dirty = True
@@ -80,6 +92,22 @@ class LayerGroupDock(QDockWidget):
             self.window.document.rename_layer(self.window.document.layers.index(node), name)
         self.window.dirty = True
         self.window._update_window_title()
+
+    def sync_model_from_widget(self) -> None:
+        self.tree.children = self._read_children(self.list.invisibleRootItem())
+        self.sync_to_document()
+
+    def _read_children(self, parent_item) -> list:
+        children = []
+        for index in range(parent_item.childCount()):
+            item = parent_item.child(index)
+            node = self._items.get(id(item))
+            if node is None:
+                continue
+            if isinstance(node, LayerGroup):
+                node.children = self._read_children(item)
+            children.append(node)
+        return children
 
     def sync_to_document(self) -> None:
         layers = list(self.tree.iter_layers())
