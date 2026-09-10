@@ -25,12 +25,16 @@ def install(window) -> None:
     tool_group = QActionGroup(window)
     tool_group.setExclusive(True)
     for key, text, shortcut, tool in tools:
-        action = QAction(text, window)
-        action.setShortcut(shortcut)
-        action.setCheckable(True)
-        action.triggered.connect(lambda checked=False, value=tool: window.canvas.set_tool(value))
-        menu.addAction(action)
-        tool_group.addAction(action)
+        if tool is Tool.SELECT_RECT:
+            action = window.tool_actions[Tool.SELECT_RECT]
+            menu.addAction(action)
+        else:
+            action = QAction(text, window)
+            action.setShortcut(shortcut)
+            action.setCheckable(True)
+            action.triggered.connect(lambda checked=False, value=tool: window.canvas.set_tool(value))
+            menu.addAction(action)
+            tool_group.addAction(action)
         actions[key] = action
     actions["rect"].setChecked(window.canvas.tool is Tool.SELECT_RECT)
 
@@ -54,7 +58,6 @@ def install(window) -> None:
 
     window.tool_actions.update(
         {
-            Tool.SELECT_RECT: actions["rect"],
             Tool.SELECT_ELLIPSE: actions["ellipse"],
             Tool.SELECT_POLYGON: actions["polygon"],
             Tool.SELECT_LASSO: actions["lasso"],
