@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt
-from PySide6.QtGui import QAction, QIcon
+from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QMenu, QMessageBox, QStyle, QTabBar, QToolBar, QToolButton, QSizePolicy, QWidget
 
 from ordpaint.ui.color_lab import ColorWheel
@@ -215,6 +215,7 @@ def _install_reference_color_wheel(window) -> None:
     if layout is None:
         return
     wheel = ColorWheel(panel)
+    wheel.setObjectName("referenceWheel")
     wheel.setFixedSize(178, 178)
     wheel.colorSelected.connect(window._set_color_from_canvas)
     layout.insertWidget(1, wheel, 0, Qt.AlignmentFlag.AlignHCenter)
@@ -233,7 +234,6 @@ def _install_reference_panel_details(window) -> None:
         colors.setWindowTitle("Цвета")
         colors.setMinimumWidth(220)
         colors.setMaximumWidth(285)
-    # The reference has no extra status-field for the active layer.
     label = getattr(window, "layer_status_label", None)
     if label is not None:
         label.hide()
