@@ -4,7 +4,7 @@ import json
 import math
 
 from PySide6.QtCore import QPointF, QSettings, Qt, Signal
-from PySide6.QtGui import QColor, QConicalGradient, QPainter, QPen, QRadialGradient
+from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import (
     QDockWidget,
     QFormLayout,
@@ -23,35 +23,39 @@ class ColorWheel(QWidget):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setFixedSize(180, 180)
+        self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, False)
 
     def paintEvent(self, event) -> None:
         del event
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        center = QPointF(90, 90)
+        center = QPointF(90.0, 90.0)
         radius = 88.0
-
-        hue = QConicalGradient(center, -90.0)
-        hue.setColorAt(0.0, QColor.fromHsv(0, 255, 255))
-        hue.setColorAt(1.0 / 6.0, QColor.fromHsv(60, 255, 255))
-        hue.setColorAt(2.0 / 6.0, QColor.fromHsv(120, 255, 255))
-        hue.setColorAt(3.0 / 6.0, QColor.fromHsv(180, 255, 255))
-        hue.setColorAt(4.0 / 6.0, QColor.fromHsv(240, 255, 255))
-        hue.setColorAt(5.0 / 6.0, QColor.fromHsv(300, 255, 255))
-        hue.setColorAt(1.0, QColor.fromHsv(360, 255, 255))
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(hue)
-        painter.drawEllipse(center, radius, radius)
 
-        saturation = QRadialGradient(center, radius)
-        saturation.setColorAt(0.0, QColor(255, 255, 255, 255))
-        saturation.setColorAt(0.82, QColor(255, 255, 255, 30))
-        saturation.setColorAt(1.0, QColor(255, 255, 255, 0))
-        painter.setBrush(saturation)
-        painter.drawEllipse(center, radius, radius)
+        # Use solid pie slices instead of Qt gradient brushes. This is a little
+        # more work per paint, but is deterministic across Linux/Windows
+        # software renderers and avoids native gradient-engine crashes.
+        steps = 72
+        span = 360.0 / steps
+        for index in range(steps):
+            color = QColor.fromHsvF(index / steps, 1.0, 1.0, 1.0)
+            painter.setBrush(color)
+            painter.drawPie(2, 2, 176, 176, int((-90.0 + index * span) * 16), int(span * 16) + 1)
 
-        painter.setPen(QPen(QColor("#ffffff"), 1))
+        # White center gives the usual saturation/value feel without a
+        # gradient. Concentric translucent circles are cheap and robust.
+        for index in range(1, 18):
+            fraction = index / 18.0
+            alpha = max(0, round(235 * (1.0 - fraction)))
+            color = QColor(255, 255, 255, alpha)
+            painter.setBrush(color)
+            diameter = 176.0 * (1.0 - fraction * 0.88)
+            offset = (180.0 - diameter) / 2.0
+            painter.drawEllipse(QPointF(offset + diameter / 2.0, offset + diameter / 2.0), diameter / 2.0, diameter / 2.0)
+
         painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.setPen(QPen(QColor("#ffffff"), 1))
         painter.drawEllipse(center, radius, radius)
         painter.end()
 
@@ -90,6 +94,7 @@ class ColorLabDock(QDockWidget):
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(10, 10, 10, 10)
         self.wheel = ColorWheel()
+        self.wheel.setObjectName("referenceWheel")
         self.wheel.colorSelected.connect(self._set_color)
         layout.addWidget(self.wheel)
         form = QFormLayout()
@@ -155,6 +160,8 @@ class ColorLabDock(QDockWidget):
     def _load_palette(self) -> list[str]:
         try:
             value = json.loads(str(self.settings.value(self.SETTINGS_KEY, "[]")))
+            if not isinstance(value, list):
+                return []
             return [str(item) for item in value if QColor(str(item)).isValid()][:12]
         except (TypeError, ValueError, json.JSONDecodeError):
             return []
