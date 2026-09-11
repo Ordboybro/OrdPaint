@@ -2,8 +2,16 @@ from __future__ import annotations
 
 from PySide6.QtCore import QPoint
 from PySide6.QtGui import QAction
+from PySide6.QtWidgets import QMenu
 
 from ordpaint.ui.canvas import Canvas
+
+
+def _find_menu(window, title: str):
+    for menu in window.menuBar().findChildren(QMenu):
+        if menu.title() == title:
+            return menu
+    return None
 
 
 def install(window) -> None:
@@ -32,7 +40,7 @@ def install(window) -> None:
     action = QAction("Привязка к сетке", window, checkable=True, shortcut="Ctrl+Shift+G")
     action.setToolTip("Привязывать курсор рисования и выделения к узлам сетки")
     action.toggled.connect(lambda checked: setattr(window.canvas, "snap_to_grid", bool(checked)))
-    view_menu = next((item.menu() for item in window.menuBar().actions() if item.text() == "Вид"), None)
+    view_menu = _find_menu(window, "Вид")
     if view_menu is not None:
         view_menu.addAction(action)
     window.snap_grid_action = action
