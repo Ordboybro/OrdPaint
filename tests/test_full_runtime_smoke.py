@@ -5,6 +5,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QPoint, Qt
 from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QToolBar, QToolButton
 
 from ordpaint.core.document import Document
 from ordpaint.core.tools import Tool
@@ -61,6 +62,7 @@ def test_full_editor_startup_and_interaction(qapp, monkeypatch) -> None:
     qapp.processEvents()
     QTest.qWait(30)
     qapp.processEvents()
+
     assert [action.text() for action in window.menuBar().actions()] == [
         "Файл",
         "Правка",
@@ -72,6 +74,19 @@ def test_full_editor_startup_and_interaction(qapp, monkeypatch) -> None:
     tabs = window.findChild(type(window._ordpaint_document_tabs), "documentTabs")
     assert tabs is not None
     assert tabs.count() == 1
+    assert tabs.tabText(0) == "Безымянный"
+    document_toolbar = window.findChild(QToolBar, "documentToolbar")
+    assert document_toolbar is not None
+    assert window.findChild(type(window.color_dock.widget()), "referenceWheel") is not None
+    main_toolbar = window.findChild(QToolBar, "mainToolbar")
+    assert main_toolbar is not None
+    labeled_buttons = [button for button in main_toolbar.findChildren(QToolButton) if button.defaultAction() is not None]
+    assert any(button.defaultAction() is window.new_action and not button.icon().isNull() for button in labeled_buttons)
+    assert any(button.defaultAction() is window.save_action and not button.icon().isNull() for button in labeled_buttons)
+    assert window.tools_dock.width() <= 220
+    assert window.layers_dock.width() <= 285
+    assert window.color_dock.width() <= 285
+
     screenshot = window.grab()
     assert screenshot.width() > 0
     assert screenshot.height() > 0
