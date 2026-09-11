@@ -1,15 +1,22 @@
 from __future__ import annotations
 
 from PySide6.QtGui import QAction
-from PySide6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QMenu, QMessageBox
 
 from ordpaint.core.image_ops import crop_document, flip_document, grayscale_document, invert_document
+
+
+def _find_menu(window, title: str):
+    for menu in window.menuBar().findChildren(QMenu):
+        if menu.title() == title:
+            return menu
+    return None
 
 
 def install(window) -> None:
     if getattr(window, "_ordpaint_image_ops", False):
         return
-    menu = next((action.menu() for action in window.menuBar().actions() if action.text() == "Изображение"), None)
+    menu = _find_menu(window, "Изображение")
     if menu is None:
         menu = window.menuBar().addMenu("Изображение")
 
