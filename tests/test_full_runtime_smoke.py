@@ -6,6 +6,7 @@ from pathlib import Path
 from PySide6.QtCore import QPoint, Qt
 from PySide6.QtTest import QTest
 
+from ordpaint.core.document import Document
 from ordpaint.core.tools import Tool
 from ordpaint.ui.application_window import MainWindow
 from ordpaint.ui.brush_presets import BrushPresetDock
@@ -33,6 +34,10 @@ def test_full_editor_startup_and_interaction(qapp, monkeypatch) -> None:
     install_crash_reporter()
     install_grid_enhancement()
     window = MainWindow()
+    # Keep the runtime smoke deterministic: the test validates editor wiring,
+    # not the cost of transforming a full-size production canvas.
+    window._replace_document(Document(320, 240))
+    window.dirty = False
     install_grid_ux(window)
     install_polish(window)
     install_pressure_input()
