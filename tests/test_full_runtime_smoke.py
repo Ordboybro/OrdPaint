@@ -11,6 +11,7 @@ from ordpaint.ui.application_window import MainWindow
 from ordpaint.ui.brush_presets import BrushPresetDock
 from ordpaint.ui.color_lab import ColorLabDock
 from ordpaint.ui.crash_reporter import install as install_crash_reporter
+from ordpaint.ui.final_polish import install as install_final_polish
 from ordpaint.ui.grid_enhancement import install as install_grid_enhancement
 from ordpaint.ui.grid_ux import install as install_grid_ux
 from ordpaint.ui.image_ops import install as install_image_ops
@@ -50,10 +51,22 @@ def test_full_editor_startup_and_interaction(qapp, monkeypatch) -> None:
     window.layer_group_dock = LayerGroupDock(window)
     window.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, window.layer_group_dock)
     install_layout_restore(window)
+    install_final_polish(window)
     window.show()
     qapp.processEvents()
     QTest.qWait(30)
     qapp.processEvents()
+    assert [action.text() for action in window.menuBar().actions()] == [
+        "Файл",
+        "Правка",
+        "Вид",
+        "Изображение",
+        "Слой",
+        "Справка",
+    ]
+    tabs = window.findChild(type(window._ordpaint_document_tabs), "documentTabs")
+    assert tabs is not None
+    assert tabs.count() == 1
     screenshot = window.grab()
     assert screenshot.width() > 0
     assert screenshot.height() > 0
@@ -84,7 +97,6 @@ def test_full_editor_startup_and_interaction(qapp, monkeypatch) -> None:
     assert window.canvas.flip_transform_horizontal()
     assert window.canvas.flip_transform_vertical()
     assert window.canvas.cancel_transform()
-    # The stroke intentionally makes the document dirty; close cleanly so CI never opens a modal dialog.
     window.dirty = False
     window.close()
     qapp.processEvents()
