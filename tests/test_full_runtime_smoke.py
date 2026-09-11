@@ -29,10 +29,8 @@ from ordpaint.ui.transform_integration import install as install_transform
 
 def test_full_editor_startup_and_interaction(qapp, monkeypatch) -> None:
     monkeypatch.setattr("ordpaint.ui.application_window.SessionManager.recover_or_none", lambda self: None)
-
     install_crash_reporter()
     install_grid_enhancement()
-
     window = MainWindow()
     install_grid_ux(window)
     install_polish(window)
@@ -45,7 +43,6 @@ def test_full_editor_startup_and_interaction(qapp, monkeypatch) -> None:
     install_image_ops(window)
     install_keyboard_polish(window)
     install_recovery_polish(window)
-
     window.brush_presets_dock = BrushPresetDock(window)
     window.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, window.brush_presets_dock)
     window.color_lab_dock = ColorLabDock(window)
@@ -53,12 +50,10 @@ def test_full_editor_startup_and_interaction(qapp, monkeypatch) -> None:
     window.layer_group_dock = LayerGroupDock(window)
     window.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, window.layer_group_dock)
     install_layout_restore(window)
-
     window.show()
     qapp.processEvents()
     QTest.qWait(30)
     qapp.processEvents()
-
     screenshot = window.grab()
     assert screenshot.width() > 0
     assert screenshot.height() > 0
@@ -68,7 +63,6 @@ def test_full_editor_startup_and_interaction(qapp, monkeypatch) -> None:
         destination = Path(screenshot_path)
         destination.parent.mkdir(parents=True, exist_ok=True)
         assert screenshot.save(str(destination), "PNG")
-
     window.canvas.fit_to_window()
     window.canvas.zoom_in()
     window.canvas.zoom_out()
@@ -76,23 +70,21 @@ def test_full_editor_startup_and_interaction(qapp, monkeypatch) -> None:
     window.canvas.set_show_grid(True)
     window.canvas.set_show_rulers(False)
     window.canvas.set_show_rulers(True)
-
     center = window.canvas.rect().center()
     window.canvas.set_tool(Tool.BRUSH)
     QTest.mousePress(window.canvas, Qt.MouseButton.LeftButton, pos=center)
     QTest.mouseMove(window.canvas, center + QPoint(20, 10), 20)
     QTest.mouseRelease(window.canvas, Qt.MouseButton.LeftButton, pos=center + QPoint(20, 10))
-
     for tool in Tool:
         window.canvas.set_tool(tool)
         assert window.canvas.tool is tool
-
     window.canvas.select_all()
     assert window.canvas.begin_transform()
     assert window.canvas.rotate_transform_clockwise()
     assert window.canvas.flip_transform_horizontal()
     assert window.canvas.flip_transform_vertical()
     assert window.canvas.cancel_transform()
-
+    # The stroke intentionally makes the document dirty; close cleanly so CI never opens a modal dialog.
+    window.dirty = False
     window.close()
     qapp.processEvents()
