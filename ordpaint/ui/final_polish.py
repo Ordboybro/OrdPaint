@@ -217,7 +217,7 @@ def _install_reference_color_wheel(window) -> None:
     wheel = ColorWheel(panel)
     wheel.setObjectName("referenceWheel")
     wheel.setFixedSize(178, 178)
-    wheel.colorSelected.connect(window._set_color_from_canvas)
+    wheel.colorSelected.connect(dock._set_color)
     layout.insertWidget(1, wheel, 0, Qt.AlignmentFlag.AlignHCenter)
     dock._reference_wheel = wheel
 
