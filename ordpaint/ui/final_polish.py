@@ -32,8 +32,6 @@ def _install_reference_menus(window) -> None:
     if view_menu is None:
         return
 
-    # The reference keeps the top-level menu bar intentionally small. Tool
-    # selection remains available from the left palette and keyboard shortcuts.
     tools_menu = _menu(window, "Инструменты")
     if tools_menu is not None:
         window.menuBar().removeAction(tools_menu.menuAction())
@@ -100,6 +98,16 @@ def _install_document_strip(window) -> None:
     if toolbar is None or window.findChild(QToolBar, "documentToolbar") is not None:
         return
 
+    # Move zoom controls to the document strip, leaving the primary toolbar
+    # visually identical to the reference: create/open/save/export + undo/redo.
+    for button in toolbar.findChildren(QToolButton):
+        action = button.defaultAction()
+        if action in (window.fit_view_action, window.reset_view_action):
+            toolbar.removeAction(action)
+    for label in toolbar.findChildren(type(window.zoom_label)):
+        if label is window.zoom_label or label.text().strip() == "Масштаб":
+            toolbar.removeWidget(label)
+
     document_toolbar = QToolBar("Документ", window)
     document_toolbar.setObjectName("documentToolbar")
     document_toolbar.setMovable(False)
@@ -117,12 +125,12 @@ def _install_document_strip(window) -> None:
     tabs.setCurrentIndex(0)
     document_toolbar.addWidget(tabs)
 
-    spacer = QToolButton(document_toolbar)
-    spacer.setAutoRaise(True)
-    spacer.setText("+")
-    spacer.setToolTip("Новый документ")
-    spacer.clicked.connect(window.new_document)
-    document_toolbar.addWidget(spacer)
+    new_button = QToolButton(document_toolbar)
+    new_button.setAutoRaise(True)
+    new_button.setText("+")
+    new_button.setToolTip("Новый документ")
+    new_button.clicked.connect(window.new_document)
+    document_toolbar.addWidget(new_button)
 
     document_toolbar.addSeparator()
     zoom_button = QToolButton(document_toolbar)
@@ -172,8 +180,6 @@ def _install_toolbar_style(window) -> None:
 
 
 def _install_workspace_geometry(window) -> None:
-    # Keep the first-run workspace close to the supplied reference without
-    # overriding a user's saved window geometry on subsequent launches.
     state = getattr(window, "ui_state", None)
     if not getattr(state, "geometry", b""):
         window.resize(1200, 800)
