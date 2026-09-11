@@ -77,7 +77,11 @@ def test_full_editor_startup_and_interaction(qapp, monkeypatch) -> None:
     assert tabs.tabText(0) == "Безымянный"
     document_toolbar = window.findChild(QToolBar, "documentToolbar")
     assert document_toolbar is not None
-    assert window.findChild(type(window.color_dock.widget()), "referenceWheel") is not None
+    reference_wheel = window.findChild(type(window.color_dock.widget()), "referenceWheel")
+    assert reference_wheel is not None
+    before_color = window.canvas.color.name()
+    QTest.mouseClick(reference_wheel, Qt.MouseButton.LeftButton, pos=QPoint(120, 90))
+    assert window.canvas.color.name() != before_color
     main_toolbar = window.findChild(QToolBar, "mainToolbar")
     assert main_toolbar is not None
     labeled_buttons = [button for button in main_toolbar.findChildren(QToolButton) if button.defaultAction() is not None]
