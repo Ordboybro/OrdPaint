@@ -3,7 +3,7 @@ from __future__ import annotations
 from types import MethodType
 
 from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtWidgets import QDialog, QDialogButtonBox, QDoubleSpinBox, QFormLayout, QVBoxLayout
+from PySide6.QtWidgets import QDialog, QDialogButtonBox, QDoubleSpinBox, QFormLayout, QMenu, QVBoxLayout
 
 
 class TransformDialog(QDialog):
@@ -42,7 +42,10 @@ class TransformDialog(QDialog):
 
 
 def install(window) -> None:
-    menu = next((action.menu() for action in window.menuBar().actions() if action.text() == "Трансформация"), None)
+    edit_menu = next((menu for menu in window.menuBar().findChildren(QMenu) if menu.title() == "Правка"), None)
+    menu = None
+    if edit_menu is not None:
+        menu = next((submenu for submenu in edit_menu.findChildren(QMenu) if submenu.title() == "Трансформация"), None)
     if menu is None:
         return
 
