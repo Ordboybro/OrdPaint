@@ -4,7 +4,7 @@ import json
 import math
 
 from PySide6.QtCore import QPointF, QSettings, Qt, Signal
-from PySide6.QtGui import QColor, QImage, QPainter, QPen, QPixmap
+from PySide6.QtGui import QColor, QConicalGradient, QPainter, QPen, QRadialGradient
 from PySide6.QtWidgets import (
     QDockWidget,
     QFormLayout,
@@ -23,30 +23,36 @@ class ColorWheel(QWidget):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setFixedSize(180, 180)
-        self._image = QImage(180, 180, QImage.Format.Format_ARGB32)
-        self._pixmap = QPixmap()
-        self._render()
-
-    def _render(self) -> None:
-        self._image.fill(Qt.GlobalColor.transparent)
-        for y in range(180):
-            for x in range(180):
-                dx, dy = x - 89.5, y - 89.5
-                radius = math.hypot(dx, dy)
-                if radius > 88:
-                    continue
-                hue = (math.degrees(math.atan2(dy, dx)) + 360.0) % 360.0
-                saturation = radius / 88.0
-                self._image.setPixelColor(x, y, QColor.fromHsvF(hue / 360.0, saturation, 1.0, 1.0))
-        self._pixmap = QPixmap.fromImage(self._image)
 
     def paintEvent(self, event) -> None:
         del event
         painter = QPainter(self)
-        painter.drawPixmap(0, 0, self._pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        center = QPointF(90, 90)
+        radius = 88.0
+
+        hue = QConicalGradient(center, -90.0)
+        hue.setColorAt(0.0, QColor.fromHsv(0, 255, 255))
+        hue.setColorAt(1.0 / 6.0, QColor.fromHsv(60, 255, 255))
+        hue.setColorAt(2.0 / 6.0, QColor.fromHsv(120, 255, 255))
+        hue.setColorAt(3.0 / 6.0, QColor.fromHsv(180, 255, 255))
+        hue.setColorAt(4.0 / 6.0, QColor.fromHsv(240, 255, 255))
+        hue.setColorAt(5.0 / 6.0, QColor.fromHsv(300, 255, 255))
+        hue.setColorAt(1.0, QColor.fromHsv(360, 255, 255))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(hue)
+        painter.drawEllipse(center, radius, radius)
+
+        saturation = QRadialGradient(center, radius)
+        saturation.setColorAt(0.0, QColor(255, 255, 255, 255))
+        saturation.setColorAt(0.82, QColor(255, 255, 255, 30))
+        saturation.setColorAt(1.0, QColor(255, 255, 255, 0))
+        painter.setBrush(saturation)
+        painter.drawEllipse(center, radius, radius)
+
         painter.setPen(QPen(QColor("#ffffff"), 1))
         painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawEllipse(QPointF(90, 90), 88, 88)
+        painter.drawEllipse(center, radius, radius)
         painter.end()
 
     def mousePressEvent(self, event) -> None:
@@ -57,11 +63,15 @@ class ColorWheel(QWidget):
             self._pick(event.position())
 
     def _pick(self, point: QPointF) -> None:
-        x, y = int(point.x()), int(point.y())
-        if 0 <= x < 180 and 0 <= y < 180:
-            color = self._image.pixelColor(x, y)
-            if color.isValid() and color.alpha() > 0:
-                self.colorSelected.emit(color)
+        dx = point.x() - 89.5
+        dy = point.y() - 89.5
+        radius = math.hypot(dx, dy)
+        if radius > 88.0:
+            return
+        hue = (math.degrees(math.atan2(dy, dx)) + 360.0) % 360.0
+        saturation = min(1.0, radius / 88.0)
+        color = QColor.fromHsvF(hue / 360.0, saturation, 1.0, 1.0)
+        self.colorSelected.emit(color)
 
 
 class ColorLabDock(QDockWidget):
