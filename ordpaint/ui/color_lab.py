@@ -4,7 +4,7 @@ import json
 import math
 
 from PySide6.QtCore import QPointF, QSettings, Qt, Signal
-from PySide6.QtGui import QColor, QImage, QPainter, QPen
+from PySide6.QtGui import QColor, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QDockWidget,
     QFormLayout,
@@ -24,6 +24,7 @@ class ColorWheel(QWidget):
         super().__init__(parent)
         self.setFixedSize(180, 180)
         self._image = QImage(180, 180, QImage.Format.Format_ARGB32)
+        self._pixmap = QPixmap()
         self._render()
 
     def _render(self) -> None:
@@ -37,11 +38,12 @@ class ColorWheel(QWidget):
                 hue = (math.degrees(math.atan2(dy, dx)) + 360.0) % 360.0
                 saturation = radius / 88.0
                 self._image.setPixelColor(x, y, QColor.fromHsvF(hue / 360.0, saturation, 1.0, 1.0))
+        self._pixmap = QPixmap.fromImage(self._image)
 
     def paintEvent(self, event) -> None:
         del event
         painter = QPainter(self)
-        painter.drawImage(0, 0, self._image)
+        painter.drawPixmap(0, 0, self._pixmap)
         painter.setPen(QPen(QColor("#ffffff"), 1))
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawEllipse(QPointF(90, 90), 88, 88)
