@@ -7,6 +7,7 @@ from ordpaint.ui.application_window import MainWindow
 from ordpaint.ui.brush_presets import BrushPresetDock
 from ordpaint.ui.color_lab import ColorLabDock
 from ordpaint.ui.crash_reporter import install as install_crash_reporter
+from ordpaint.ui.final_polish import install as install_final_polish
 from ordpaint.ui.grid_enhancement import install as install_grid_enhancement
 from ordpaint.ui.grid_ux import install as install_grid_ux
 from ordpaint.ui.image_ops import install as install_image_ops
@@ -37,8 +38,6 @@ def main() -> int:
 
     window = MainWindow()
     install_grid_ux(window)
-    # Install the visual brush renderer first, then wrap it with the shared
-    # pressure/stabilizer engine so tablet dynamics cannot be overwritten.
     install_polish(window)
     install_pressure_input()
     install_resize(window)
@@ -58,6 +57,7 @@ def main() -> int:
     window.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, window.layer_group_dock)
 
     install_layout_restore(window)
+    install_final_polish(window)
     window.show()
 
     return app.exec()
