@@ -100,8 +100,6 @@ def _install_document_strip(window) -> None:
     if toolbar is None or window.findChild(QToolBar, "documentToolbar") is not None:
         return
 
-    # Remove only the exact zoom actions/widgets owned by the base window.
-    # Do not inspect arbitrary toolbar widgets: QWidget has no text() API.
     for action in (window.fit_view_action, window.reset_view_action):
         if action in toolbar.actions():
             toolbar.removeAction(action)
@@ -221,7 +219,7 @@ def _install_reference_color_wheel(window) -> None:
     wheel = ColorWheel(panel)
     wheel.setObjectName("referenceWheel")
     wheel.setFixedSize(178, 178)
-    wheel.colorSelected.connect(dock._set_color)
+    wheel.colorSelected.connect(window.canvas.set_color)
     layout.insertWidget(1, wheel, 0, Qt.AlignmentFlag.AlignHCenter)
     dock._reference_wheel = wheel
 
@@ -267,7 +265,6 @@ def _install_workspace_geometry(window) -> None:
 
 
 def install(window) -> None:
-    """Apply the final presentation pass while preserving every editor system."""
     _install_reference_menus(window)
     _install_document_strip(window)
     _install_toolbar_icons(window)
