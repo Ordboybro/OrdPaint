@@ -100,14 +100,18 @@ def _install_document_strip(window) -> None:
     if toolbar is None or window.findChild(QToolBar, "documentToolbar") is not None:
         return
 
-    for button in toolbar.findChildren(QToolButton):
-        action = button.defaultAction()
-        if action in (window.fit_view_action, window.reset_view_action):
+    # Remove only the exact zoom actions/widgets owned by the base window.
+    # Do not inspect arbitrary toolbar widgets: QWidget has no text() API.
+    for action in (window.fit_view_action, window.reset_view_action):
+        if action in toolbar.actions():
             toolbar.removeAction(action)
-    for action in list(toolbar.actions()):
-        widget = toolbar.widgetForAction(action)
-        if widget is window.zoom_label:
-            toolbar.removeAction(action)
+    zoom_label_action = None
+    for action in toolbar.actions():
+        if toolbar.widgetForAction(action) is window.zoom_label:
+            zoom_label_action = action
+            break
+    if zoom_label_action is not None:
+        toolbar.removeAction(zoom_label_action)
 
     document_toolbar = QToolBar("Документ", window)
     document_toolbar.setObjectName("documentToolbar")
@@ -217,7 +221,7 @@ def _install_reference_color_wheel(window) -> None:
     wheel = ColorWheel(panel)
     wheel.setObjectName("referenceWheel")
     wheel.setFixedSize(178, 178)
-    wheel.colorSelected.connect(dock._set_color)
+    wheel.colorSelected.connect(dock._set_color_from_canvas)
     layout.insertWidget(1, wheel, 0, Qt.AlignmentFlag.AlignHCenter)
     dock._reference_wheel = wheel
 
