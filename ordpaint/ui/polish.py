@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMenu,
     QPushButton,
     QSlider,
     QSpinBox,
@@ -56,6 +57,13 @@ def _icon(name: str) -> QIcon:
     renderer.render(painter)
     painter.end()
     return QIcon(pixmap)
+
+
+def _find_menu(window, title: str):
+    for menu in window.menuBar().findChildren(QMenu):
+        if menu.title() == title:
+            return menu
+    return None
 
 
 def _install_canvas_dynamics() -> None:
@@ -323,7 +331,7 @@ def install(window) -> None:
     window.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
     window.color_studio = studio
     window.canvas.color_picked.connect(studio.sync)
-    view_menu = next((action.menu() for action in window.menuBar().actions() if action.text() == "Вид"), None)
+    view_menu = _find_menu(window, "Вид")
     if view_menu is not None:
         grid_settings = QAction("Настройки сетки…", window)
         grid_settings.triggered.connect(lambda: _show_grid_settings(window))
