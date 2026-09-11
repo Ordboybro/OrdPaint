@@ -51,18 +51,22 @@ class MainWindow(BaseMainWindow):
         edit_menu = self._find_menu("Правка")
         if edit_menu is not None:
             menu = edit_menu.addMenu("Трансформация")
-            menu.addActions([
-                self.begin_transform_action,
-                self.commit_transform_action,
-                self.cancel_transform_action,
-            ])
+            menu.addActions(
+                [
+                    self.begin_transform_action,
+                    self.commit_transform_action,
+                    self.cancel_transform_action,
+                ]
+            )
             menu.addSeparator()
-            menu.addActions([
-                self.flip_horizontal_action,
-                self.flip_vertical_action,
-                self.rotate_clockwise_action,
-                self.rotate_counterclockwise_action,
-            ])
+            menu.addActions(
+                [
+                    self.flip_horizontal_action,
+                    self.flip_vertical_action,
+                    self.rotate_clockwise_action,
+                    self.rotate_counterclockwise_action,
+                ]
+            )
             self.transform_menu = menu
 
         self.canvas.transform_active_changed.connect(self._update_transform_actions)
