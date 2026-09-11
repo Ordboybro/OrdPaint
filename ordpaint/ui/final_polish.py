@@ -14,7 +14,10 @@ _ACCENT = "#ff7a00"
 
 
 def _menu(window, title: str):
-    return next((action.menu() for action in window.menuBar().actions() if action.text() == title), None)
+    for menu in window.menuBar().findChildren(QMenu):
+        if menu.title() == title:
+            return menu
+    return None
 
 
 def _add_panel_action(view_menu, dock, label: str, *, default_hidden: bool) -> None:
