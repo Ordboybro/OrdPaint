@@ -3,8 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt
-from PySide6.QtGui import QAction
-from PySide6.QtWidgets import QMenu, QMessageBox, QStyle, QTabBar, QToolBar, QToolButton
+from PySide6.QtGui import QAction, QIcon
+from PySide6.QtWidgets import QMenu, QMessageBox, QStyle, QTabBar, QToolBar, QToolButton, QSizePolicy, QWidget
+
+from ordpaint.ui.color_lab import ColorWheel
 
 
 _REFERENCE_BG = "#171b20"
@@ -98,15 +100,13 @@ def _install_document_strip(window) -> None:
     if toolbar is None or window.findChild(QToolBar, "documentToolbar") is not None:
         return
 
-    # Move zoom controls to the document strip, leaving the primary toolbar
-    # visually identical to the reference: create/open/save/export + undo/redo.
     for button in toolbar.findChildren(QToolButton):
         action = button.defaultAction()
         if action in (window.fit_view_action, window.reset_view_action):
             toolbar.removeAction(action)
     for action in list(toolbar.actions()):
-        label = toolbar.widgetForAction(action)
-        if label is window.zoom_label:
+        widget = toolbar.widgetForAction(action)
+        if widget is window.zoom_label:
             toolbar.removeAction(action)
 
     document_toolbar = QToolBar("Документ", window)
@@ -134,6 +134,9 @@ def _install_document_strip(window) -> None:
     document_toolbar.addWidget(new_button)
 
     document_toolbar.addSeparator()
+    spacer = QWidget(document_toolbar)
+    spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+    document_toolbar.addWidget(spacer)
     zoom_button = QToolButton(document_toolbar)
     zoom_button.setDefaultAction(window.fit_view_action)
     zoom_button.setToolTip("Вписать в окно")
@@ -159,6 +162,29 @@ def _install_document_strip(window) -> None:
     update_title()
 
 
+def _install_toolbar_icons(window) -> None:
+    toolbar = window.findChild(QToolBar, "mainToolbar")
+    if toolbar is None:
+        return
+    style = window.style()
+    standard = {
+        "Новый": QStyle.StandardPixmap.SP_FileIcon,
+        "Открыть…": QStyle.StandardPixmap.SP_DialogOpenButton,
+        "Сохранить": QStyle.StandardPixmap.SP_DialogSaveButton,
+        "Экспортировать изображение…": QStyle.StandardPixmap.SP_ArrowRight,
+        "Отменить": QStyle.StandardPixmap.SP_ArrowBack,
+        "Повторить": QStyle.StandardPixmap.SP_ArrowForward,
+    }
+    for button in toolbar.findChildren(QToolButton):
+        action = button.defaultAction()
+        if action is None:
+            continue
+        if action.icon().isNull() and action.text() in standard:
+            button.setIcon(style.standardIcon(standard[action.text()]))
+        if not button.toolTip():
+            button.setToolTip(action.text())
+
+
 def _install_toolbar_style(window) -> None:
     toolbar = window.findChild(QToolBar, "mainToolbar")
     if toolbar is None:
@@ -180,6 +206,39 @@ def _install_toolbar_style(window) -> None:
             button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
 
 
+def _install_reference_color_wheel(window) -> None:
+    dock = getattr(window, "color_dock", None)
+    if dock is None or getattr(dock, "_reference_wheel", None) is not None:
+        return
+    panel = dock.widget()
+    layout = panel.layout() if panel is not None else None
+    if layout is None:
+        return
+    wheel = ColorWheel(panel)
+    wheel.setFixedSize(178, 178)
+    wheel.colorSelected.connect(window._set_color_from_canvas)
+    layout.insertWidget(1, wheel, 0, Qt.AlignmentFlag.AlignHCenter)
+    dock._reference_wheel = wheel
+
+
+def _install_reference_panel_details(window) -> None:
+    tools = getattr(window, "tools_dock", None)
+    if tools is not None:
+        tools.setWindowTitle("Инструменты")
+    layers = getattr(window, "layers_dock", None)
+    if layers is not None:
+        layers.setWindowTitle("Слои")
+    colors = getattr(window, "color_dock", None)
+    if colors is not None:
+        colors.setWindowTitle("Цвета")
+        colors.setMinimumWidth(220)
+        colors.setMaximumWidth(285)
+    # The reference has no extra status-field for the active layer.
+    label = getattr(window, "layer_status_label", None)
+    if label is not None:
+        label.hide()
+
+
 def _install_workspace_geometry(window) -> None:
     state = getattr(window, "ui_state", None)
     if not getattr(state, "geometry", b""):
@@ -190,24 +249,27 @@ def _install_workspace_geometry(window) -> None:
     color_dock = getattr(window, "color_dock", None)
     if tools_dock is not None:
         tools_dock.setMinimumWidth(185)
-        tools_dock.setMaximumWidth(260)
+        tools_dock.setMaximumWidth(220)
     for dock in (layers_dock, color_dock):
         if dock is not None:
-            dock.setMinimumWidth(230)
-            dock.setMaximumWidth(340)
+            dock.setMinimumWidth(220)
+            dock.setMaximumWidth(285)
 
     if tools_dock is not None:
-        window.resizeDocks([tools_dock], [205], Qt.Orientation.Horizontal)
+        window.resizeDocks([tools_dock], [195], Qt.Orientation.Horizontal)
     right = [dock for dock in (layers_dock, color_dock) if dock is not None]
     if right:
-        window.resizeDocks(right, [270] * len(right), Qt.Orientation.Horizontal)
+        window.resizeDocks(right, [255] * len(right), Qt.Orientation.Horizontal)
 
 
 def install(window) -> None:
     """Apply the final presentation pass while preserving every editor system."""
     _install_reference_menus(window)
     _install_document_strip(window)
+    _install_toolbar_icons(window)
     _install_toolbar_style(window)
+    _install_reference_color_wheel(window)
+    _install_reference_panel_details(window)
     _install_workspace_geometry(window)
 
     window.setStyleSheet(
@@ -226,8 +288,9 @@ def install(window) -> None:
         QTabBar#documentTabs::tab:hover {{ background: #282e35; }}
         QToolBar#documentToolbar QToolButton {{ min-width: 30px; max-width: 38px; font-size: 18px; }}
         QDockWidget#toolsDock {{ min-width: 185px; }}
-        QDockWidget#layersDock, QDockWidget#colorDock {{ min-width: 230px; }}
+        QDockWidget#layersDock, QDockWidget#colorDock {{ min-width: 220px; }}
         QDockWidget::title {{ padding: 6px 9px; background: #1d2228; }}
         QStatusBar {{ min-height: 24px; }}
+        #referenceWheel {{ margin: 2px; }}
         """
     )
