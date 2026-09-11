@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction
-from PySide6.QtWidgets import QDockWidget, QToolBar, QToolButton
+from PySide6.QtWidgets import QDockWidget, QStyle, QToolBar, QToolButton
 
 
 # The reference workspace is intentionally compact: the primary editor stays visible,
@@ -41,15 +41,13 @@ def install(window) -> None:
     # The main toolbar is deliberately compact and icon-first, matching the reference.
     toolbar = window.findChild(QToolBar, "mainToolbar")
     if toolbar is not None:
-        toolbar.setIconSize(window.style().pixelMetric(window.style().PixelMetric.PM_SmallIconSize))
-        toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+        toolbar.setIconSize(window.style().pixelMetric(QStyle.PixelMetric.PM_SmallIconSize))
         toolbar.setContentsMargins(6, 2, 6, 2)
         for button in toolbar.findChildren(QToolButton):
             if button.defaultAction() is None:
                 continue
             action = button.defaultAction()
             if action.icon().isNull():
-                # Keep controls such as zoom readable when no icon is available.
                 button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
             else:
                 button.setToolTip(action.text())
