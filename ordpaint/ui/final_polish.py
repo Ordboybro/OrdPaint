@@ -104,9 +104,10 @@ def _install_document_strip(window) -> None:
         action = button.defaultAction()
         if action in (window.fit_view_action, window.reset_view_action):
             toolbar.removeAction(action)
-    for label in toolbar.findChildren(type(window.zoom_label)):
-        if label is window.zoom_label or label.text().strip() == "Масштаб":
-            toolbar.removeWidget(label)
+    for action in list(toolbar.actions()):
+        label = toolbar.widgetForAction(action)
+        if label is window.zoom_label or (label is not None and label.text().strip() == "Масштаб"):
+            toolbar.removeAction(action)
 
     document_toolbar = QToolBar("Документ", window)
     document_toolbar.setObjectName("documentToolbar")
