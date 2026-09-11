@@ -39,7 +39,7 @@ _ICON_PATHS = {
     "save": "M5 3h14v18H5z M8 3v6h8V3 M8 15h8v6H8z",
     "export": "M12 3v11 M8 7l4-4 4 4 M5 13v7h14v-7",
     "undo": "M9 7H4l4-4v3c6 0 10 3 10 8 0 2-1 4-3 5 1-2 1-4 0-6-1-3-3-6-6-6v0z",
-    "redo": "M15 7h5l-4-4v3C10 6 6 9 6 14c0 2 1 4 3 5-1-2 1-4 0-6 1-3 3-6 6-6v0z",
+    "redo": "M15 7h5l-4-4v3c-6 0-10 3-10 8 0 2 1 4 3 5-1-2-1-4 0-6 1-3 3-6 6-6v0z",
 }
 
 
@@ -127,7 +127,7 @@ def _install_canvas_dynamics() -> None:
         self.document.touch()
         self.document_changed.emit()
 
-    def fill(point) -> None:
+    def fill(self, point) -> None:
         layer = self.document.active_layer
         if layer.locked:
             return
