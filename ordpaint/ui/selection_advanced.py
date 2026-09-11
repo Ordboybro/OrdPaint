@@ -9,12 +9,19 @@ from ordpaint.ui.canvas import Canvas
 
 
 def install(window) -> None:
-    """Install ellipse/polygon/lasso/crop selection modes without replacing the canvas."""
+    """Install advanced selection modes while keeping the reference top-level menu layout."""
     if getattr(window, "_ordpaint_selection_advanced", False):
         return
     window.canvas.selection.set_document_size(window.document.width, window.document.height)
     actions = {}
-    menu = window.menuBar().addMenu("Выделение")
+
+    parent_menu = next((action.menu() for action in window.menuBar().actions() if action.text() == "Правка"), None)
+    if parent_menu is None:
+        parent_menu = next((action.menu() for action in window.menuBar().actions() if action.text() == "Изображение"), None)
+    if parent_menu is None:
+        return
+    menu = parent_menu.addMenu("Выделение")
+
     tools = (
         ("rect", "Прямоугольник", "M", Tool.SELECT_RECT),
         ("ellipse", "Эллипс", "Shift+M", Tool.SELECT_ELLIPSE),
@@ -27,14 +34,14 @@ def install(window) -> None:
     for key, text, shortcut, tool in tools:
         if tool is Tool.SELECT_RECT:
             action = window.tool_actions[Tool.SELECT_RECT]
-            menu.addAction(action)
+            action.setCheckable(True)
         else:
             action = QAction(text, window)
             action.setShortcut(shortcut)
             action.setCheckable(True)
             action.triggered.connect(lambda checked=False, value=tool: window.canvas.set_tool(value))
-            menu.addAction(action)
-            tool_group.addAction(action)
+        menu.addAction(action)
+        tool_group.addAction(action)
         actions[key] = action
     actions["rect"].setChecked(window.canvas.tool is Tool.SELECT_RECT)
 
