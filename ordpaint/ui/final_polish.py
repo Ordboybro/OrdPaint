@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QDockWidget, QStyle, QToolBar, QToolButton
 
@@ -19,8 +19,6 @@ def _add_panel_action(window, view_menu, dock, label: str) -> None:
 
 def install(window) -> None:
     """Apply the final presentation pass without removing advanced functionality."""
-    # Keep the reference workspace clean on first launch. Advanced controls are still
-    # one click away and remain restorable through the View menu.
     advanced_docks = (
         (getattr(window, "brush_presets_dock", None), "Расширенные кисти"),
         (getattr(window, "color_lab_dock", None), "Лаборатория цвета"),
@@ -41,7 +39,8 @@ def install(window) -> None:
     # The main toolbar is deliberately compact and icon-first, matching the reference.
     toolbar = window.findChild(QToolBar, "mainToolbar")
     if toolbar is not None:
-        toolbar.setIconSize(window.style().pixelMetric(QStyle.PixelMetric.PM_SmallIconSize))
+        icon_size = window.style().pixelMetric(QStyle.PixelMetric.PM_SmallIconSize)
+        toolbar.setIconSize(QSize(icon_size, icon_size))
         toolbar.setContentsMargins(6, 2, 6, 2)
         for button in toolbar.findChildren(QToolButton):
             if button.defaultAction() is None:
