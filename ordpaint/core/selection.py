@@ -42,8 +42,7 @@ class Selection:
             self.set_rect(target)
             return
         current = self._bounds.topLeft()
-        target_top_left = target.topLeft()
-        self.move(target_top_left.x() - current.x(), target_top_left.y() - current.y())
+        self.move(target.left() - current.x(), target.top() - current.y())
 
     @property
     def mask(self) -> QImage:
@@ -101,8 +100,7 @@ class Selection:
         if mask.size() != self._mask.size():
             raise ValueError("Selection mask dimensions must match the document")
         source = mask.convertToFormat(QImage.Format.Format_Alpha8)
-        source_bounds = self._nonzero_bounds(source)
-        self._combine(source, mode, source_bounds)
+        self._combine(source, mode, self._nonzero_bounds(source))
 
     def move(self, dx: int, dy: int, width: int | None = None, height: int | None = None) -> None:
         if width is not None and height is not None:
@@ -167,6 +165,21 @@ class Selection:
             return
         self._resize_preserve(width, height, document_bound=False)
 
+    @staticmethod
+    def _shape_image(width: int, height: int, rect: QRect, shape: str) -> QImage:
+        source = QImage(width, height, QImage.Format.Format_Alpha8)
+        source.fill(0)
+        painter = QPainter(source)
+        brush = QColor(255, 255, 255, 255)
+        painter.setPen(brush)
+        painter.setBrush(brush)
+        if shape == "ellipse":
+            painter.drawEllipse(rect)
+        else:
+            painter.fillRect(rect, brush)
+        painter.end()
+        return source
+
     def _combine_geometry(self, rect: QRect, shape: str, mode: SelectionMode) -> None:
         rect = rect.normalized()
         if not self._document_bound:
@@ -176,18 +189,7 @@ class Selection:
             if mode == SelectionMode.REPLACE:
                 self.clear()
             return
-
-        source_argb = QImage(self._width, self._height, QImage.Format.Format_ARGB32_Premultiplied)
-        source_argb.fill(QtGlobalTransparent)
-        painter = QPainter(source_argb)
-        painter.setPen(QColor(255, 255, 255, 255))
-        painter.setBrush(QColor(255, 255, 255, 255))
-        if shape == "ellipse":
-            painter.drawEllipse(normalized)
-        else:
-            painter.drawRect(normalized)
-        painter.end()
-        source = source_argb.convertToFormat(QImage.Format.Format_Alpha8)
+        source = self._shape_image(self._width, self._height, normalized, shape)
         self._combine(source, mode, normalized)
 
     def _combine_polygon(self, points: list[QPoint], mode: SelectionMode) -> None:
@@ -195,67 +197,49 @@ class Selection:
             if mode == SelectionMode.REPLACE:
                 self.clear()
             return
-        if not self._document_bound:
-            bounds = QPolygon(points).boundingRect()
-            self._ensure_capacity(max(1, bounds.right() + 1), max(1, bounds.bottom() + 1))
         polygon = QPolygon(points)
+        if not self._document_bound:
+            bounds = polygon.boundingRect()
+            self._ensure_capacity(max(1, bounds.right() + 1), max(1, bounds.bottom() + 1))
         bounds = polygon.boundingRect().intersected(self._mask.rect())
         if bounds.isEmpty():
             if mode == SelectionMode.REPLACE:
                 self.clear()
             return
-        source_argb = QImage(self._width, self._height, QImage.Format.Format_ARGB32_Premultiplied)
-        source_argb.fill(QtGlobalTransparent)
-        painter = QPainter(source_argb)
-        painter.setPen(QColor(255, 255, 255, 255))
-        painter.setBrush(QColor(255, 255, 255, 255))
+        source = QImage(self._width, self._height, QImage.Format.Format_Alpha8)
+        source.fill(0)
+        painter = QPainter(source)
+        brush = QColor(255, 255, 255, 255)
+        painter.setPen(brush)
+        painter.setBrush(brush)
         painter.drawPolygon(polygon)
         painter.end()
-        source = source_argb.convertToFormat(QImage.Format.Format_Alpha8)
         self._combine(source, mode, bounds)
 
     def _combine(self, source: QImage, mode: SelectionMode, source_bounds: QRect) -> None:
         mode = SelectionMode(mode)
-        current_bounds = QRect(self._bounds)
         if mode == SelectionMode.REPLACE:
-            result_bounds = QRect(source_bounds)
-        elif mode == SelectionMode.ADD:
-            result_bounds = current_bounds.united(source_bounds) if not current_bounds.isEmpty() else QRect(source_bounds)
-        elif mode == SelectionMode.INTERSECT:
-            result_bounds = current_bounds.intersected(source_bounds)
+            self._mask = source.copy()
         else:
-            result_bounds = current_bounds
-
-        current_argb = QImage(self._width, self._height, QImage.Format.Format_ARGB32_Premultiplied)
-        current_argb.fill(QtGlobalTransparent)
-        painter = QPainter(current_argb)
-        painter.drawImage(0, 0, self._mask)
-        painter.end()
-
-        source_argb = QImage(self._width, self._height, QImage.Format.Format_ARGB32_Premultiplied)
-        source_argb.fill(QtGlobalTransparent)
-        painter = QPainter(source_argb)
-        painter.drawImage(0, 0, source)
-        painter.end()
-
-        painter = QPainter(current_argb)
-        painter.setCompositionMode(
-            {
-                SelectionMode.REPLACE: QPainter.CompositionMode.CompositionMode_Source,
+            painter = QPainter(self._mask)
+            composition = {
                 SelectionMode.ADD: QPainter.CompositionMode.CompositionMode_SourceOver,
                 SelectionMode.SUBTRACT: QPainter.CompositionMode.CompositionMode_DestinationOut,
                 SelectionMode.INTERSECT: QPainter.CompositionMode.CompositionMode_DestinationIn,
             }[mode]
-        )
-        painter.drawImage(0, 0, source_argb)
-        painter.end()
-        self._mask = current_argb.convertToFormat(QImage.Format.Format_Alpha8)
+            painter.setCompositionMode(composition)
+            painter.drawImage(0, 0, source)
+            painter.end()
 
-        if mode == SelectionMode.SUBTRACT and not current_bounds.isEmpty():
-            result_bounds = self._nonzero_bounds(self._mask, current_bounds)
-        elif mode == SelectionMode.INTERSECT and not result_bounds.isEmpty():
-            result_bounds = self._nonzero_bounds(self._mask, result_bounds)
-        self._bounds = result_bounds.intersected(self._mask.rect())
+        if mode == SelectionMode.REPLACE:
+            self._bounds = QRect(source_bounds).intersected(self._mask.rect())
+        elif mode == SelectionMode.SUBTRACT:
+            self._bounds = self._nonzero_bounds(self._mask)
+        elif mode == SelectionMode.INTERSECT:
+            self._bounds = self._nonzero_bounds(self._mask, self._bounds.intersected(source_bounds))
+        else:
+            current = QRect(self._bounds)
+            self._bounds = current.united(source_bounds).intersected(self._mask.rect()) if not current.isEmpty() else QRect(source_bounds).intersected(self._mask.rect())
 
     @staticmethod
     def _nonzero_bounds(image: QImage, region: QRect | None = None) -> QRect:
@@ -272,6 +256,3 @@ class Selection:
                     right = max(right, x)
                     bottom = max(bottom, y)
         return QRect(QPoint(left, top), QPoint(right, bottom)) if right >= left and bottom >= top else QRect()
-
-
-QtGlobalTransparent = QColor(0, 0, 0, 0)
