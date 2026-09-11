@@ -30,7 +30,10 @@ class MainWindow(BaseMainWindow):
     """Release entry point with stable access to the existing menus."""
 
     def _find_menu(self, title: str) -> QMenu | None:
-        return next((menu for menu in self.menuBar().findChildren(QMenu) if menu.title() == title), None)
+        return next(
+            (menu for menu in self.menuBar().findChildren(QMenu) if menu.title() == title),
+            None,
+        )
 
     def _install_transform_actions(self) -> None:
         self.begin_transform_action = QAction("Свободное трансформирование", self, shortcut="Ctrl+T")
