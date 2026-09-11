@@ -29,10 +29,10 @@ def main() -> int:
     app.setStyle("Fusion")
     install_crash_reporter()
     install_grid_enhancement()
-    install_grid_ux(window_class=MainWindow)
+    install_grid_ux_class = install_grid_ux
 
     window = MainWindow()
-    install_grid_ux(window)
+    install_grid_ux_class(window)
     install_polish(window)
     install_pressure_input()
     install_resize(window)
