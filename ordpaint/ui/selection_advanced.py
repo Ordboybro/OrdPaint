@@ -2,10 +2,18 @@ from __future__ import annotations
 
 from PySide6.QtCore import QPoint, QRect, Qt
 from PySide6.QtGui import QAction, QActionGroup
+from PySide6.QtWidgets import QMenu
 
 from ordpaint.core.selection import SelectionMode
 from ordpaint.core.tools import Tool
 from ordpaint.ui.canvas import Canvas
+
+
+def _find_menu(window, title: str):
+    for menu in window.menuBar().findChildren(QMenu):
+        if menu.title() == title:
+            return menu
+    return None
 
 
 def install(window) -> None:
@@ -15,9 +23,9 @@ def install(window) -> None:
     window.canvas.selection.set_document_size(window.document.width, window.document.height)
     actions = {}
 
-    parent_menu = next((action.menu() for action in window.menuBar().actions() if action.text() == "Правка"), None)
+    parent_menu = _find_menu(window, "Правка")
     if parent_menu is None:
-        parent_menu = next((action.menu() for action in window.menuBar().actions() if action.text() == "Изображение"), None)
+        parent_menu = _find_menu(window, "Изображение")
     if parent_menu is None:
         return
     menu = parent_menu.addMenu("Выделение")
