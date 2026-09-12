@@ -8,7 +8,6 @@ from PySide6.QtWidgets import QMenu, QMessageBox, QStyle, QTabBar, QToolBar, QTo
 
 from ordpaint.ui.color_lab import ColorWheel
 
-
 _REFERENCE_BG = "#171b20"
 _ACCENT = "#ff7a00"
 
@@ -198,8 +197,8 @@ def _install_toolbar_style(window) -> None:
     toolbar = window.findChild(QToolBar, "mainToolbar")
     if toolbar is None:
         return
-    toolbar.setIconSize(QSize(22, 22))
-    toolbar.setContentsMargins(8, 0, 8, 0)
+    toolbar.setIconSize(QSize(21, 21))
+    toolbar.setContentsMargins(10, 0, 10, 0)
     toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
     labels = {
         "Новый": "Создать",
@@ -217,8 +216,8 @@ def _install_toolbar_style(window) -> None:
             button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
             button.setText(labels.get(action.text(), action.text()))
             button.setToolTip(action.text())
-            button.setMinimumSize(62, 50)
-            button.setMaximumSize(84, 56)
+            button.setMinimumSize(66, 52)
+            button.setMaximumSize(88, 58)
         else:
             button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
 
@@ -292,9 +291,13 @@ def install(window) -> None:
         window.styleSheet()
         + f"""
         QMainWindow {{ background: {_REFERENCE_BG}; }}
-        QMenuBar {{ min-height: 30px; padding: 0 8px; background: #171b20; }}
+        QMenuBar {{ min-height: 30px; padding: 0 8px; background: #171b20; color: #d9dde2; }}
         QMenuBar::item {{ padding: 6px 12px; margin: 0 1px; border-radius: 4px; }}
-        QMenuBar::item:selected {{ background: #2b3037; }}
+        QMenuBar::item:selected {{ background: #2b3037; color: #ffffff; }}
+        QMenu {{ background: #20252b; color: #e1e5e9; border: 1px solid #353b43; padding: 5px; }}
+        QMenu::item {{ padding: 7px 26px 7px 10px; border-radius: 4px; }}
+        QMenu::item:selected {{ background: #2b3037; color: #ffffff; }}
+        QMenu::separator {{ height: 1px; background: #353a42; margin: 5px 6px; }}
         QToolBar#mainToolbar {{ min-height: 56px; max-height: 60px; spacing: 3px; background: #1b2026; border-bottom: 1px solid #30353c; }}
         QToolBar#mainToolbar QToolButton {{ padding: 3px 6px; border-radius: 5px; color: #e3e6ea; }}
         QToolBar#mainToolbar QToolButton:hover {{ background: #2b3037; }}
@@ -304,12 +307,13 @@ def install(window) -> None:
         QTabBar#documentTabs::tab {{ min-width: 150px; padding: 7px 14px; margin-right: 2px; color: #d7dbe0; background: #20252b; border: 1px solid #30363e; border-bottom: none; }}
         QTabBar#documentTabs::tab:selected {{ color: #ffffff; background: #2a3037; border-top: 2px solid {_ACCENT}; }}
         QTabBar#documentTabs::tab:hover {{ background: #282e35; }}
-        QToolBar#documentToolbar QToolButton {{ min-width: 30px; max-width: 38px; font-size: 18px; color: #dfe3e7; }}
+        QToolBar#documentToolbar QToolButton {{ min-width: 30px; max-width: 38px; font-size: 18px; color: #dfe3e7; border-radius: 4px; }}
+        QToolBar#documentToolbar QToolButton:hover {{ background: #2b3037; }}
         QDockWidget#toolsDock, QDockWidget#layersDock, QDockWidget#colorDock {{ font-size: 13px; }}
         QDockWidget#toolsDock {{ min-width: 185px; }}
         QDockWidget#layersDock, QDockWidget#colorDock {{ min-width: 220px; }}
         QDockWidget::title {{ padding: 6px 9px; background: #1d2228; color: #e7e9ec; border-bottom: 1px solid #30353c; }}
-        QStatusBar {{ min-height: 24px; background: #15191e; color: #aeb5bd; border-top: 1px solid #30353c; }}
+        QStatusBar {{ min-height: 24px; background: #15191e; color: #aeb5bd; border-top: 1px solid #30353c; padding-left: 8px; }}
         QToolTip {{ background: #11151a; color: #f0f2f4; border: 1px solid #3a4149; padding: 5px 7px; }}
         #referenceWheel {{ margin: 2px; }}
         """
