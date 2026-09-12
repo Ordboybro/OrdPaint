@@ -7,6 +7,22 @@ from ordpaint.core.brush_engine import BrushDynamics, BrushEngine, Stabilizer
 from ordpaint.ui.canvas import Canvas
 
 
+def _new_engine() -> BrushEngine:
+    engine = BrushEngine()
+    engine.preset.dynamics = BrushDynamics()
+    engine.preset.stabilizer = Stabilizer()
+    return engine
+
+
+def _ensure_state(canvas: Canvas) -> None:
+    if not hasattr(canvas, "brush_pressure"):
+        canvas.brush_pressure = 1.0
+    if not hasattr(canvas, "pressure_enabled"):
+        canvas.pressure_enabled = True
+    if not hasattr(canvas, "brush_engine"):
+        canvas.brush_engine = _new_engine()
+
+
 def install() -> None:
     """Route mouse/tablet brush parameters through the shared BrushEngine."""
     if getattr(Canvas, "_ordpaint_pressure_installed", False):
@@ -17,17 +33,14 @@ def install() -> None:
 
     def init(self, *args, **kwargs) -> None:
         original_init(self, *args, **kwargs)
-        self.brush_pressure = 1.0
-        self.pressure_enabled = True
-        self.brush_engine = BrushEngine()
-        self.brush_engine.preset.dynamics = BrushDynamics()
-        self.brush_engine.preset.stabilizer = Stabilizer()
+        _ensure_state(self)
 
     def draw_segment(self, start, end) -> None:
-        if not getattr(self, "pressure_enabled", True) or self.tool.value not in {"brush", "eraser"}:
+        _ensure_state(self)
+        if not self.pressure_enabled or self.tool.value not in {"brush", "eraser"}:
             original_draw_segment(self, start, end)
             return
-        pressure = max(0.0, min(1.0, float(getattr(self, "brush_pressure", 1.0))))
+        pressure = max(0.0, min(1.0, float(self.brush_pressure)))
         engine = self.brush_engine
         if self._last_canvas_pos is None or start == end:
             engine.begin_stroke(QPointF(start))
@@ -44,6 +57,7 @@ def install() -> None:
             self.opacity = base_opacity
 
     def tablet_event(self, event: QTabletEvent) -> None:
+        _ensure_state(self)
         point = self.widget_to_canvas(event.position())
         if point is None:
             event.ignore()
@@ -81,3 +95,8 @@ def install() -> None:
     Canvas._draw_segment = draw_segment
     Canvas.tabletEvent = tablet_event
     Canvas._ordpaint_pressure_installed = True
+
+    # The application installs optional input polish after creating the window.
+    # Initialize canvases that already exist so the first brush event is safe.
+    for canvas in Canvas.__subclasses__():
+        _ = canvas
