@@ -95,8 +95,3 @@ def install() -> None:
     Canvas._draw_segment = draw_segment
     Canvas.tabletEvent = tablet_event
     Canvas._ordpaint_pressure_installed = True
-
-    # The application installs optional input polish after creating the window.
-    # Initialize canvases that already exist so the first brush event is safe.
-    for canvas in Canvas.__subclasses__():
-        _ = canvas
