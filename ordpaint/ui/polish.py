@@ -100,8 +100,8 @@ def _install_canvas_dynamics() -> None:
         if layer.locked:
             return
         radius = max(0.5, self.brush_size / 2)
-        spacing = max(0.01, self.brush_spacing / 100)
-        smoothness = max(0, min(100, self.brush_smoothness)) / 100
+        spacing = max(0.01, getattr(self, "brush_spacing", 20) / 100)
+        smoothness = max(0, min(100, getattr(self, "brush_smoothness", 0))) / 100
         step = max(1.0, radius * 2 * spacing * (1.0 - smoothness * 0.45))
         dx = end.x() - start.x()
         dy = end.y() - start.y()
@@ -118,11 +118,12 @@ def _install_canvas_dynamics() -> None:
             point = QPointF(start.x() + dx * ratio, start.y() + dy * ratio)
             color = QColor(self.color)
             color.setAlpha(round(color.alpha() * self.opacity / 100))
-            if self.brush_hardness >= 99:
+            hardness = getattr(self, "brush_hardness", 100)
+            if hardness >= 99:
                 painter.setBrush(QBrush(color))
             else:
                 gradient = QRadialGradient(point, radius)
-                hard_stop = self.brush_hardness / 100
+                hard_stop = hardness / 100
                 gradient.setColorAt(0.0, color)
                 gradient.setColorAt(hard_stop, color)
                 edge = QColor(color)
@@ -145,7 +146,7 @@ def _install_canvas_dynamics() -> None:
             layer.pixmap,
             point,
             color,
-            tolerance=self.fill_tolerance,
+            tolerance=getattr(self, "fill_tolerance", 0),
             clip=self.selection.rect,
         ):
             self.document.touch()
