@@ -58,14 +58,17 @@ def _install_reference_menus(window) -> None:
         (getattr(window, "brush_presets_dock", None), "Расширенные кисти"),
         (getattr(window, "color_lab_dock", None), "Лаборатория цвета"),
         (getattr(window, "layer_group_dock", None), "Группы слоёв"),
-        (window.findChild(type(window.tools_dock), "brushSettingsDock"), "Доп. параметры кисти"),
+        (window.findChild(type(window.tools_dock), "brushSettingsDock"), "Параметры кисти"),
         (window.findChild(type(window.tools_dock), "colorStudioDock"), "Расширенная панель цвета"),
     )
-    saved_layout = bool(getattr(getattr(window, "ui_state", None), "window_state", b""))
     for dock, label in advanced_docks:
         if dock is None:
             continue
-        _add_panel_action(panels, dock, label, default_hidden=not saved_layout)
+        # The reference workspace is intentionally compact: the brush settings
+        # dock remains visible, while secondary/experimental panels start
+        # hidden. Every panel stays available from Вид -> Панели.
+        is_brush_settings = dock.objectName() == "brushSettingsDock"
+        _add_panel_action(panels, dock, label, default_hidden=not is_brush_settings)
 
     if not any(action.text() == "Справка" for action in window.menuBar().actions()):
         help_menu = window.menuBar().addMenu("Справка")
