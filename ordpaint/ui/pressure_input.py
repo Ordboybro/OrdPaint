@@ -38,7 +38,7 @@ def install() -> None:
         self.brush_size = max(1, round(size))
         self.opacity = max(1, round(opacity))
         try:
-            original_draw_segment(start, smoothed_end.toPoint())
+            original_draw_segment(self, start, smoothed_end.toPoint())
         finally:
             self.brush_size = base_size
             self.opacity = base_opacity
