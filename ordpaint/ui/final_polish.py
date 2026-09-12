@@ -32,6 +32,8 @@ def _add_panel_action(view_menu, dock, label: str, *, default_hidden: bool) -> N
 
 
 def _install_reference_menus(window) -> None:
+    if getattr(window, "_reference_menus_installed", False):
+        return
     view_menu = _menu(window, "Вид")
     image_menu = _menu(window, "Изображение")
     if view_menu is None:
@@ -96,6 +98,8 @@ def _install_reference_menus(window) -> None:
             )
         )
         help_menu.addActions([shortcuts, about])
+
+    window._reference_menus_installed = True
 
 
 def _install_document_strip(window) -> None:
@@ -194,8 +198,7 @@ def _install_toolbar_style(window) -> None:
     toolbar = window.findChild(QToolBar, "mainToolbar")
     if toolbar is None:
         return
-    icon_size = max(18, window.style().pixelMetric(QStyle.PixelMetric.PM_SmallIconSize))
-    toolbar.setIconSize(QSize(icon_size, icon_size))
+    toolbar.setIconSize(QSize(22, 22))
     toolbar.setContentsMargins(8, 0, 8, 0)
     toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
     for button in toolbar.findChildren(QToolButton):
@@ -205,8 +208,8 @@ def _install_toolbar_style(window) -> None:
         if not action.icon().isNull():
             button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
             button.setToolTip(action.text())
-            button.setMinimumSize(60, 50)
-            button.setMaximumSize(82, 56)
+            button.setMinimumSize(62, 50)
+            button.setMaximumSize(84, 56)
         else:
             button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
 
@@ -280,21 +283,25 @@ def install(window) -> None:
         window.styleSheet()
         + f"""
         QMainWindow {{ background: {_REFERENCE_BG}; }}
-        QMenuBar {{ min-height: 30px; padding-left: 8px; }}
-        QMenuBar::item {{ padding: 7px 12px; }}
-        QToolBar#mainToolbar {{ min-height: 56px; max-height: 60px; spacing: 3px; }}
-        QToolBar#mainToolbar QToolButton {{ padding: 3px 6px; border-radius: 5px; }}
+        QMenuBar {{ min-height: 30px; padding: 0 8px; background: #171b20; }}
+        QMenuBar::item {{ padding: 6px 12px; margin: 0 1px; border-radius: 4px; }}
+        QMenuBar::item:selected {{ background: #2b3037; }}
+        QToolBar#mainToolbar {{ min-height: 56px; max-height: 60px; spacing: 3px; background: #1b2026; border-bottom: 1px solid #30353c; }}
+        QToolBar#mainToolbar QToolButton {{ padding: 3px 6px; border-radius: 5px; color: #e3e6ea; }}
         QToolBar#mainToolbar QToolButton:hover {{ background: #2b3037; }}
         QToolBar#mainToolbar QToolButton:pressed {{ background: #3a4048; }}
+        QToolBar#mainToolbar::separator {{ width: 1px; background: #353a42; margin: 8px 5px; }}
         QToolBar#documentToolbar {{ min-height: 42px; max-height: 46px; background: #15191e; border-bottom: 1px solid #30353c; }}
         QTabBar#documentTabs::tab {{ min-width: 150px; padding: 7px 14px; margin-right: 2px; color: #d7dbe0; background: #20252b; border: 1px solid #30363e; border-bottom: none; }}
         QTabBar#documentTabs::tab:selected {{ color: #ffffff; background: #2a3037; border-top: 2px solid {_ACCENT}; }}
         QTabBar#documentTabs::tab:hover {{ background: #282e35; }}
-        QToolBar#documentToolbar QToolButton {{ min-width: 30px; max-width: 38px; font-size: 18px; }}
+        QToolBar#documentToolbar QToolButton {{ min-width: 30px; max-width: 38px; font-size: 18px; color: #dfe3e7; }}
+        QDockWidget#toolsDock, QDockWidget#layersDock, QDockWidget#colorDock {{ font-size: 13px; }}
         QDockWidget#toolsDock {{ min-width: 185px; }}
         QDockWidget#layersDock, QDockWidget#colorDock {{ min-width: 220px; }}
-        QDockWidget::title {{ padding: 6px 9px; background: #1d2228; }}
-        QStatusBar {{ min-height: 24px; }}
+        QDockWidget::title {{ padding: 6px 9px; background: #1d2228; color: #e7e9ec; border-bottom: 1px solid #30353c; }}
+        QStatusBar {{ min-height: 24px; background: #15191e; color: #aeb5bd; border-top: 1px solid #30353c; }}
+        QToolTip {{ background: #11151a; color: #f0f2f4; border: 1px solid #3a4149; padding: 5px 7px; }}
         #referenceWheel {{ margin: 2px; }}
         """
     )
