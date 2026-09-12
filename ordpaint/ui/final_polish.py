@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QAction
-from PySide6.QtWidgets import QMenu, QMessageBox, QStyle, QTabBar, QToolBar, QToolButton, QSizePolicy, QWidget
+from PySide6.QtWidgets import QMenu, QStyle, QTabBar, QToolBar, QToolButton, QSizePolicy
 
 from ordpaint.ui.color_lab import ColorWheel
 
@@ -30,7 +28,8 @@ def _style(window) -> None:
         QMenuBar::item:selected {{ background: #2b323b; color: #ffffff; }}
         QMenu {{
             background: #20262d; color: #d8dde3; border: 1px solid #343c46;
-            padding: 5px; }
+            padding: 5px;
+        }}
         QMenu::item {{ padding: 6px 24px 6px 10px; border-radius: 4px; }}
         QMenu::item:selected {{ background: #343c46; color: #ffffff; }}
         QMenu::separator {{ height: 1px; background: #343c46; margin: 5px 6px; }}
@@ -60,11 +59,6 @@ def _style(window) -> None:
     """)
 
 
-def _remove_action(menu: QMenu | None, action: QAction | None) -> None:
-    if menu is not None and action is not None:
-        menu.removeAction(action)
-
-
 def _install_document_bar(window) -> None:
     bar = getattr(window, "_ordpaint_document_toolbar", None)
     if bar is None:
@@ -74,7 +68,7 @@ def _install_document_bar(window) -> None:
         bar.setFloatable(False)
         bar.setIconSize(QSize(16, 16))
         bar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        bar.setStyleSheet("QToolBar { background: #171b20; border: 0; padding: 0 8px 0 8px; }")
+        bar.setStyleSheet("QToolBar { background: #171b20; border: 0; padding: 0 8px; }")
         window.addToolBar(Qt.ToolBarArea.TopToolBarArea, bar)
         window._ordpaint_document_toolbar = bar
 
@@ -113,11 +107,6 @@ def _install_document_bar(window) -> None:
         reset.triggered.connect(window.canvas.reset_view)
         bar.insertAction(fit, reset)
         window._ordpaint_reset_action = reset
-
-    try:
-        tabs.tabBarClicked.connect(lambda _index: window.canvas.update())
-    except RuntimeError:
-        pass
 
 
 def _install_reference_docks(window) -> None:
@@ -204,7 +193,6 @@ def _install_menu_structure(window) -> None:
                 action.setCheckable(True)
                 action.setChecked(dock.isVisible())
                 action.toggled.connect(dock.setVisible)
-    current = [action.text() for action in bar.actions()]
     for title in reversed(desired):
         action = next((a for a in bar.actions() if a.text() == title), None)
         if action is not None:
@@ -213,14 +201,13 @@ def _install_menu_structure(window) -> None:
 
 
 def install(window) -> None:
-    """Final reference pass: layout, chrome, colors and safe menu structure."""
+    """Final reference pass: compact default workspace with advanced panels retained."""
     _style(window)
     _install_menu_structure(window)
     _install_top_toolbar(window)
     _install_document_bar(window)
     _install_reference_docks(window)
 
-    # The reference workspace starts with a single 1200x800 document.
     try:
         if window.canvas.document.width != 1200 or window.canvas.document.height != 800:
             window._replace_document(window.canvas.document.__class__(1200, 800))
@@ -232,7 +219,6 @@ def install(window) -> None:
     except AttributeError:
         pass
 
-    # Keep the reference workspace compact while retaining all advanced tools.
     for dock in (
         getattr(window, "brush_presets_dock", None),
         getattr(window, "color_lab_dock", None),
