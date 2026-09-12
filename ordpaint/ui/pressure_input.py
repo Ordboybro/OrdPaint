@@ -1,13 +1,30 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent
+from PySide6.QtCore import QEvent, QPointF
 from PySide6.QtGui import QTabletEvent
 
+from ordpaint.core.brush_engine import BrushDynamics, BrushEngine, Stabilizer
 from ordpaint.ui.canvas import Canvas
 
 
+def _new_engine() -> BrushEngine:
+    engine = BrushEngine()
+    engine.preset.dynamics = BrushDynamics()
+    engine.preset.stabilizer = Stabilizer()
+    return engine
+
+
+def _ensure_state(canvas: Canvas) -> None:
+    if not hasattr(canvas, "brush_pressure"):
+        canvas.brush_pressure = 1.0
+    if not hasattr(canvas, "pressure_enabled"):
+        canvas.pressure_enabled = True
+    if not hasattr(canvas, "brush_engine"):
+        canvas.brush_engine = _new_engine()
+
+
 def install() -> None:
-    """Add optional tablet-pressure input without affecting mouse workflows."""
+    """Route mouse/tablet brush parameters through the shared BrushEngine."""
     if getattr(Canvas, "_ordpaint_pressure_installed", False):
         return
 
@@ -16,52 +33,59 @@ def install() -> None:
 
     def init(self, *args, **kwargs) -> None:
         original_init(self, *args, **kwargs)
-        self.brush_pressure = 1.0
-        self.pressure_enabled = True
+        _ensure_state(self)
 
     def draw_segment(self, start, end) -> None:
-        if not getattr(self, "pressure_enabled", True) or self.tool.value not in {"brush", "eraser"}:
+        _ensure_state(self)
+        if not self.pressure_enabled or self.tool.value not in {"brush", "eraser"}:
             original_draw_segment(self, start, end)
             return
-        pressure = max(0.05, min(1.0, float(getattr(self, "brush_pressure", 1.0))))
+        pressure = max(0.0, min(1.0, float(self.brush_pressure)))
+        engine = self.brush_engine
+        if self._last_canvas_pos is None or start == end:
+            engine.begin_stroke(QPointF(start))
+        smoothed_end = engine.point(QPointF(end), pressure)
         base_size = self.brush_size
         base_opacity = self.opacity
-        self.brush_size = max(1, round(base_size * (0.35 + 0.65 * pressure)))
-        self.opacity = max(1, round(base_opacity * (0.45 + 0.55 * pressure)))
+        size, opacity = engine.preset.dynamics.apply(base_size, base_opacity, pressure)
+        self.brush_size = max(1, round(size))
+        self.opacity = max(1, round(opacity))
         try:
-            original_draw_segment(self, start, end)
+            original_draw_segment(self, start, smoothed_end.toPoint())
         finally:
             self.brush_size = base_size
             self.opacity = base_opacity
 
     def tablet_event(self, event: QTabletEvent) -> None:
+        _ensure_state(self)
         point = self.widget_to_canvas(event.position())
         if point is None:
             event.ignore()
             return
-        self.brush_pressure = max(0.05, min(1.0, float(event.pressure())))
+        self.brush_pressure = max(0.0, min(1.0, float(event.pressure())))
         press = QEvent.Type.TabletPress
         move = QEvent.Type.TabletMove
         release = QEvent.Type.TabletRelease
-        if event.type() in {press, move}:
-            if self.tool.value in {"brush", "eraser"} and not self.document.active_layer.locked:
-                if event.type() == press:
-                    self.action_started.emit()
-                    self._drawing = True
-                    self._last_canvas_pos = point
-                    self._start_canvas_pos = point
-                    self._draw_segment(point, point)
-                elif self._drawing and self._last_canvas_pos is not None:
-                    self._draw_segment(self._last_canvas_pos, point)
-                    self._last_canvas_pos = point
-                self.update()
-                event.accept()
-                return
+        if event.type() in {press, move} and self.tool.value in {"brush", "eraser"} and not self.document.active_layer.locked:
+            if event.type() == press:
+                self.action_started.emit()
+                self._drawing = True
+                self._last_canvas_pos = None
+                self._start_canvas_pos = point
+                self._draw_segment(point, point)
+                self._last_canvas_pos = point
+            elif self._drawing:
+                self._draw_segment(self._last_canvas_pos or point, point)
+                self._last_canvas_pos = point
+            self.update()
+            event.accept()
+            return
         if event.type() == release:
             self._drawing = False
             self._last_canvas_pos = None
             self._start_canvas_pos = None
             self.brush_pressure = 1.0
+            self.brush_engine.end_stroke()
             self.update()
             event.accept()
             return

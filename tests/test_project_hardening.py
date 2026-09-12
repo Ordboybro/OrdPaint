@@ -30,7 +30,7 @@ def test_load_rejects_excessive_total_layer_pixels(tmp_path: Path) -> None:
     path = tmp_path / "too-many-pixels.ordpaint"
     path.write_text(json.dumps(payload), encoding="utf-8")
     assert width * height * 2 > MAX_TOTAL_LAYER_PIXELS
-    with pytest.raises(ProjectError, match="слишком много"):
+    with pytest.raises(ProjectError, match="слишком велик"):
         load_project(path)
 
 

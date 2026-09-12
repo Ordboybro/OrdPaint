@@ -58,6 +58,7 @@ class ResizeDialog(QDialog):
         )
         for label, value in anchors:
             self.anchor_combo.addItem(label, value)
+        self.anchor_combo.setCurrentIndex(4)
         form.addRow("Привязка холста", self.anchor_combo)
 
         self.resampling_combo = QComboBox()
@@ -96,7 +97,7 @@ class ResizeDialog(QDialog):
 
     def _update_state(self) -> None:
         pixels = self.width_spin.value() * self.height_spin.value()
-        valid = pixels <= MAX_PIXELS
+        valid = pixels < MAX_PIXELS
         self._buttons.button(QDialogButtonBox.StandardButton.Ok).setEnabled(valid)
         self.preview_label.setText(
             f"Результат: {self.width_spin.value()} × {self.height_spin.value()} px · {pixels / 1_000_000:.2f} MP"
@@ -112,6 +113,6 @@ class ResizeDialog(QDialog):
         )
 
     def accept(self) -> None:
-        if self.width_spin.value() * self.height_spin.value() > MAX_PIXELS:
+        if self.width_spin.value() * self.height_spin.value() >= MAX_PIXELS:
             return
         super().accept()

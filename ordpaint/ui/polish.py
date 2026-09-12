@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMenu,
     QPushButton,
     QSlider,
     QSpinBox,
@@ -34,8 +35,12 @@ _ICON_PATHS = {
     "fill": "M6 4l10 10-4 4L2 8z M15 17h6v3h-6z",
     "eyedropper": "M14 4l6 6-2 2-2-2-7 7H5v-4l7-7-2-2 2-2z",
     "select": "M4 4h7v2H6v5H4zm9 0h7v7h-2V6h-5zM4 13h2v5h5v2H4zm14 0h2v7h-7v-2h5z",
+    "new": "M5 3h10l4 4v14H5z M15 3v5h4 M8 13h8 M12 9v8",
+    "open": "M3 6h7l2 2h9v12H3z M3 10h18",
+    "save": "M5 3h14v18H5z M8 3v6h8V3 M8 15h8v6H8z",
+    "export": "M12 3v11 M8 7l4-4 4 4 M5 13v7h14v-7",
     "undo": "M9 7H4l4-4v3c6 0 10 3 10 8 0 2-1 4-3 5 1-2 1-4 0-6-1-3-3-6-6-6v0z",
-    "redo": "M15 7h5l-4-4v3C10 6 6 9 6 14c0 2 1 4 3 5-1-2-1-4 0-6 1-3 3-6 6-6v0z",
+    "redo": "M15 7h5l-4-4v3c-6 0-10 3-10 8 0 2 1 4 3 5-1-2-1-4 0-6 1-3 3-6 6-6v0z",
 }
 
 
@@ -52,6 +57,13 @@ def _icon(name: str) -> QIcon:
     renderer.render(painter)
     painter.end()
     return QIcon(pixmap)
+
+
+def _find_menu(window, title: str):
+    for menu in window.menuBar().findChildren(QMenu):
+        if menu.title() == title:
+            return menu
+    return None
 
 
 def _install_canvas_dynamics() -> None:
@@ -88,8 +100,8 @@ def _install_canvas_dynamics() -> None:
         if layer.locked:
             return
         radius = max(0.5, self.brush_size / 2)
-        spacing = max(0.01, self.brush_spacing / 100)
-        smoothness = max(0, min(100, self.brush_smoothness)) / 100
+        spacing = max(0.01, getattr(self, "brush_spacing", 20) / 100)
+        smoothness = max(0, min(100, getattr(self, "brush_smoothness", 0))) / 100
         step = max(1.0, radius * 2 * spacing * (1.0 - smoothness * 0.45))
         dx = end.x() - start.x()
         dy = end.y() - start.y()
@@ -106,11 +118,12 @@ def _install_canvas_dynamics() -> None:
             point = QPointF(start.x() + dx * ratio, start.y() + dy * ratio)
             color = QColor(self.color)
             color.setAlpha(round(color.alpha() * self.opacity / 100))
-            if self.brush_hardness >= 99:
+            hardness = getattr(self, "brush_hardness", 100)
+            if hardness >= 99:
                 painter.setBrush(QBrush(color))
             else:
                 gradient = QRadialGradient(point, radius)
-                hard_stop = self.brush_hardness / 100
+                hard_stop = hardness / 100
                 gradient.setColorAt(0.0, color)
                 gradient.setColorAt(hard_stop, color)
                 edge = QColor(color)
@@ -133,7 +146,7 @@ def _install_canvas_dynamics() -> None:
             layer.pixmap,
             point,
             color,
-            tolerance=self.fill_tolerance,
+            tolerance=getattr(self, "fill_tolerance", 0),
             clip=self.selection.rect,
         ):
             self.document.touch()
@@ -147,6 +160,18 @@ def _install_canvas_dynamics() -> None:
     Canvas._draw_segment = draw_segment
     Canvas._flood_fill = fill
     Canvas._ordpaint_dynamics_installed = True
+
+
+def _ensure_canvas_dynamics_state(canvas) -> None:
+    defaults = {
+        "brush_hardness": 100,
+        "brush_spacing": 20,
+        "brush_smoothness": 0,
+        "fill_tolerance": 0,
+    }
+    for name, value in defaults.items():
+        if not hasattr(canvas, name):
+            setattr(canvas, name, value)
 
 
 class ColorStudio(QWidget):
@@ -242,6 +267,7 @@ class ColorStudio(QWidget):
 
 
 def _add_brush_controls(window) -> None:
+    _ensure_canvas_dynamics_state(window.canvas)
     dock = QDockWidget("Кисть", window)
     dock.setObjectName("brushSettingsDock")
     panel = QWidget()
@@ -273,14 +299,15 @@ def _add_brush_controls(window) -> None:
 
 def install(window) -> None:
     _install_canvas_dynamics()
+    _ensure_canvas_dynamics_state(window.canvas)
     window.setWindowIcon(_icon("brush"))
     if hasattr(window, "grid_action"):
         window.grid_action.setShortcut("Ctrl+G")
     for attr, name in {
-        "new_action": "brush",
-        "open_action": "select",
-        "save_action": "fill",
-        "export_action": "select",
+        "new_action": "new",
+        "open_action": "open",
+        "save_action": "save",
+        "export_action": "export",
         "undo_action": "undo",
         "redo_action": "redo",
     }.items():
@@ -319,7 +346,7 @@ def install(window) -> None:
     window.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
     window.color_studio = studio
     window.canvas.color_picked.connect(studio.sync)
-    view_menu = next((action.menu() for action in window.menuBar().actions() if action.text() == "Вид"), None)
+    view_menu = _find_menu(window, "Вид")
     if view_menu is not None:
         grid_settings = QAction("Настройки сетки…", window)
         grid_settings.triggered.connect(lambda: _show_grid_settings(window))

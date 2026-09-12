@@ -189,10 +189,8 @@ class MainWindow(BaseMainWindow):
     def _replace_document(self, document: Document) -> None:
         super()._replace_document(document)
         if hasattr(self, "begin_transform_action"):
-            try:
-                self.canvas.transform_active_changed.disconnect(self._update_transform_actions)
-            except (RuntimeError, TypeError):
-                pass
+            # The base replacement creates a brand-new Canvas, so there is no
+            # existing connection on this signal to disconnect. Reconnect once.
             self.canvas.transform_active_changed.connect(self._update_transform_actions)
             self._update_transform_actions(self.canvas.transform_active)
 

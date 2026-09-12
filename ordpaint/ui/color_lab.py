@@ -4,7 +4,7 @@ import json
 import math
 
 from PySide6.QtCore import QPointF, QSettings, Qt, Signal
-from PySide6.QtGui import QColor, QImage, QPainter, QPen
+from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import (
     QDockWidget,
     QFormLayout,
@@ -23,28 +23,40 @@ class ColorWheel(QWidget):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setFixedSize(180, 180)
-        self._image = QImage(180, 180, QImage.Format.Format_ARGB32)
-        self._render()
-
-    def _render(self) -> None:
-        self._image.fill(Qt.GlobalColor.transparent)
-        for y in range(180):
-            for x in range(180):
-                dx, dy = x - 89.5, y - 89.5
-                radius = math.hypot(dx, dy)
-                if radius > 88:
-                    continue
-                hue = (math.degrees(math.atan2(dy, dx)) + 360.0) % 360.0
-                saturation = radius / 88.0
-                self._image.setPixelColor(x, y, QColor.fromHsvF(hue / 360.0, saturation, 1.0, 1.0))
+        self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, False)
 
     def paintEvent(self, event) -> None:
         del event
         painter = QPainter(self)
-        painter.drawImage(0, 0, self._image)
-        painter.setPen(QPen(QColor("#ffffff"), 1))
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        center = QPointF(90.0, 90.0)
+        radius = 88.0
+        painter.setPen(Qt.PenStyle.NoPen)
+
+        # Use solid pie slices instead of Qt gradient brushes. This is a little
+        # more work per paint, but is deterministic across Linux/Windows
+        # software renderers and avoids native gradient-engine crashes.
+        steps = 72
+        span = 360.0 / steps
+        for index in range(steps):
+            color = QColor.fromHsvF(index / steps, 1.0, 1.0, 1.0)
+            painter.setBrush(color)
+            painter.drawPie(2, 2, 176, 176, int((-90.0 + index * span) * 16), int(span * 16) + 1)
+
+        # White center gives the usual saturation/value feel without a
+        # gradient. Concentric translucent circles are cheap and robust.
+        for index in range(1, 18):
+            fraction = index / 18.0
+            alpha = max(0, round(235 * (1.0 - fraction)))
+            color = QColor(255, 255, 255, alpha)
+            painter.setBrush(color)
+            diameter = 176.0 * (1.0 - fraction * 0.88)
+            offset = (180.0 - diameter) / 2.0
+            painter.drawEllipse(QPointF(offset + diameter / 2.0, offset + diameter / 2.0), diameter / 2.0, diameter / 2.0)
+
         painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawEllipse(QPointF(90, 90), 88, 88)
+        painter.setPen(QPen(QColor("#ffffff"), 1))
+        painter.drawEllipse(center, radius, radius)
         painter.end()
 
     def mousePressEvent(self, event) -> None:
@@ -55,11 +67,15 @@ class ColorWheel(QWidget):
             self._pick(event.position())
 
     def _pick(self, point: QPointF) -> None:
-        x, y = int(point.x()), int(point.y())
-        if 0 <= x < 180 and 0 <= y < 180:
-            color = self._image.pixelColor(x, y)
-            if color.isValid() and color.alpha() > 0:
-                self.colorSelected.emit(color)
+        dx = point.x() - 89.5
+        dy = point.y() - 89.5
+        radius = math.hypot(dx, dy)
+        if radius > 88.0:
+            return
+        hue = (math.degrees(math.atan2(dy, dx)) + 360.0) % 360.0
+        saturation = min(1.0, radius / 88.0)
+        color = QColor.fromHsvF(hue / 360.0, saturation, 1.0, 1.0)
+        self.colorSelected.emit(color)
 
 
 class ColorLabDock(QDockWidget):
@@ -78,6 +94,7 @@ class ColorLabDock(QDockWidget):
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(10, 10, 10, 10)
         self.wheel = ColorWheel()
+        self.wheel.setObjectName("referenceWheel")
         self.wheel.colorSelected.connect(self._set_color)
         layout.addWidget(self.wheel)
         form = QFormLayout()
@@ -143,6 +160,8 @@ class ColorLabDock(QDockWidget):
     def _load_palette(self) -> list[str]:
         try:
             value = json.loads(str(self.settings.value(self.SETTINGS_KEY, "[]")))
+            if not isinstance(value, list):
+                return []
             return [str(item) for item in value if QColor(str(item)).isValid()][:12]
         except (TypeError, ValueError, json.JSONDecodeError):
             return []

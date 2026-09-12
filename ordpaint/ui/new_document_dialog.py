@@ -119,7 +119,7 @@ class NewDocumentDialog(QDialog):
         )
 
     def accept(self) -> None:
-        if self.width_spin.value() * self.height_spin.value() > 100_000_000:
-            self._size_hint.setText("Слишком большой документ: максимум 100 MP.")
+        if self.width_spin.value() * self.height_spin.value() >= 100_000_000:
+            self._size_hint.setText("Слишком большой документ: максимум менее 100 MP.")
             return
         super().accept()

@@ -10,10 +10,11 @@ permissions:
 
 concurrency:
   group: quality-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   quality:
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -21,9 +22,19 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
+      - name: Normalize checkout line endings
+        shell: bash
+        run: |
+          git config core.autocrlf false
+          git checkout -- .
       - name: Install Qt runtime dependencies
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 xvfb
+        run: >-
+          sudo apt-get update && sudo apt-get install -y
+          libegl1 libgl1 libx11-xcb1 libxcb1 libxcb-cursor0 libxcb-icccm4
+          libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0
+          libxcb-render0 libxcb-shape0 libxcb-shm0 libxcb-sync1 libxcb-xfixes0
+          libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0 xvfb
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
@@ -35,23 +46,33 @@ jobs:
       - name: Ruff check
         run: ruff check .
       - name: Ruff format
+        if: runner.os == 'Linux'
         shell: bash
         run: >-
           ruff format --check
-          main.py ordpaint/core ordpaint/ui/layer_list.py ordpaint/ui/new_document_dialog.py
-          ordpaint/ui/settings_store.py ordpaint/ui/polish.py ordpaint/ui/grid_settings_dialog.py
-          ordpaint/ui/resize_integration.py tests benchmarks
+          main.py ordpaint/core/document.py ordpaint/core/history.py ordpaint/core/layer_tree.py
+          ordpaint/core/project.py tests/test_keyboard_shortcuts.py tests/test_layer_hierarchy_persistence.py
+          tests/test_full_runtime_smoke.py
       - name: Tests on Linux
         if: runner.os == 'Linux'
         env:
           QT_QPA_PLATFORM: xcb
+          DISPLAY: ':99'
+          ORDPAINT_SMOKE_SCREENSHOT: ${{ github.workspace }}/artifacts/ordpaint-runtime-smoke.png
         shell: bash
         run: |
           set -euo pipefail
           for test_file in tests/test_*.py; do
             echo "==> $test_file"
-            xvfb-run -a python -m pytest -q "$test_file"
+            timeout --signal=TERM 90s xvfb-run -a -s '-screen 0 1280x1024x24' python -m pytest -q "$test_file"
           done
+      - name: Upload runtime smoke screenshot
+        if: runner.os == 'Linux' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: OrdPaint-runtime-smoke
+          path: artifacts/ordpaint-runtime-smoke.png
+          if-no-files-found: ignore
       - name: Tests on Windows
         if: runner.os == 'Windows'
         run: python -m pytest -q

@@ -12,6 +12,7 @@ permissions:
 jobs:
   windows:
     runs-on: windows-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v7
@@ -31,6 +32,16 @@ jobs:
           $exe = "dist/OrdPaint/OrdPaint.exe"
           if (-not (Test-Path $exe)) { throw "OrdPaint.exe was not produced" }
           Get-Item $exe | Select-Object FullName, Length
+      - name: Smoke launch packaged application
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path "dist/OrdPaint/OrdPaint.exe").Path
+          $process = Start-Process -FilePath $exe -PassThru
+          Start-Sleep -Seconds 5
+          if ($process.HasExited) {
+            throw "OrdPaint exited during packaged startup with code $($process.ExitCode)"
+          }
+          Stop-Process -Id $process.Id -Force
       - name: Archive application
         shell: pwsh
         run: Compress-Archive -Path dist/OrdPaint/* -DestinationPath OrdPaint-Windows.zip
