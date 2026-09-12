@@ -201,12 +201,21 @@ def _install_toolbar_style(window) -> None:
     toolbar.setIconSize(QSize(22, 22))
     toolbar.setContentsMargins(8, 0, 8, 0)
     toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
+    labels = {
+        "Новый": "Создать",
+        "Открыть…": "Открыть",
+        "Сохранить": "Сохранить",
+        "Экспортировать изображение…": "Экспорт",
+        "Отменить": "Отменить",
+        "Повторить": "Повторить",
+    }
     for button in toolbar.findChildren(QToolButton):
-        if button.defaultAction() is None:
-            continue
         action = button.defaultAction()
+        if action is None:
+            continue
         if not action.icon().isNull():
             button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
+            button.setText(labels.get(action.text(), action.text()))
             button.setToolTip(action.text())
             button.setMinimumSize(62, 50)
             button.setMaximumSize(84, 56)
