@@ -162,6 +162,18 @@ def _install_canvas_dynamics() -> None:
     Canvas._ordpaint_dynamics_installed = True
 
 
+def _ensure_canvas_dynamics_state(canvas) -> None:
+    defaults = {
+        "brush_hardness": 100,
+        "brush_spacing": 20,
+        "brush_smoothness": 0,
+        "fill_tolerance": 0,
+    }
+    for name, value in defaults.items():
+        if not hasattr(canvas, name):
+            setattr(canvas, name, value)
+
+
 class ColorStudio(QWidget):
     """Compact RGBA/HEX color panel with recent swatches."""
 
@@ -255,6 +267,7 @@ class ColorStudio(QWidget):
 
 
 def _add_brush_controls(window) -> None:
+    _ensure_canvas_dynamics_state(window.canvas)
     dock = QDockWidget("Кисть", window)
     dock.setObjectName("brushSettingsDock")
     panel = QWidget()
@@ -286,6 +299,7 @@ def _add_brush_controls(window) -> None:
 
 def install(window) -> None:
     _install_canvas_dynamics()
+    _ensure_canvas_dynamics_state(window.canvas)
     window.setWindowIcon(_icon("brush"))
     if hasattr(window, "grid_action"):
         window.grid_action.setShortcut("Ctrl+G")
