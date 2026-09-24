@@ -162,7 +162,7 @@ OrdPaint uses a dark, compact editor layout with warm orange accents, a dedicate
 
 ## Status
 
-OrdPaint is in release-candidate stabilization. The core editor workflow, project format, layer system, selection/transform workflow, persistence services, defensive resource limits, automated regression suite, and Windows packaging pipeline are implemented. Final release work is desktop QA against the visual reference, packaged-executable smoke testing, and verification on a clean Windows machine.
+OrdPaint is portfolio-ready and maintained as a release candidate. The core editor workflow, project format, layer system, selection/transform workflow, persistence services, defensive resource limits, automated regression suite, and Windows packaging pipeline are implemented. CI/release workflows cover the remaining reproducible verification steps.\n\nSee [`docs/SHOWCASE.md`](docs/SHOWCASE.md) for a concise portfolio overview.
 
 ## License
 
